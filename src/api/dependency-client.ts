@@ -88,28 +88,25 @@ export class DependencyClient extends DataverseClient {
    * Get plugin registrations for an entity
    */
   async getPluginsForEntity(entityLogicalName: string): Promise<PluginRegistration[]> {
-    // Query SdkMessageProcessingStep filtered by entity
+    // Query SdkMessageProcessingStep filtered by entity via sdkmessagefilter navigation
     const response = await this.request<{
       value: {
         sdkmessageprocessingstepid: string;
         name: string;
-        eventhandler_name: string;
-        sdkmessageid_name: string;
         stage: number;
         mode: number;
         filteringattributes: string;
       }[];
     }>(
       `sdkmessageprocessingsteps?$select=sdkmessageprocessingstepid,name,stage,mode,filteringattributes&` +
-      `$expand=eventhandler($select=name),sdkmessagefilter($select=primaryobjecttypecode)&` +
-      `$filter=sdkmessagefilter/primaryobjecttypecode eq '${entityLogicalName}'`
+      `$filter=sdkmessagefilterid/primaryobjecttypecode eq '${entityLogicalName}'`
     );
 
     return response.value.map(p => ({
-      pluginAssemblyId: p.eventhandler_name || '',
+      pluginAssemblyId: p.sdkmessageprocessingstepid,
       name: p.name,
       entityLogicalName,
-      messageName: p.sdkmessageid_name || '',
+      messageName: '',
       stage: p.stage,
       mode: p.mode,
     }));
@@ -154,7 +151,7 @@ export class DependencyClient extends DataverseClient {
       }[];
     }>(
       `systemforms?$select=formid,name,type,formxml&` +
-      `$filter=objecttypecode eq '${entityLogicalName}' and type in (2, 7, 11)` // Main, QuickCreate, Card
+      `$filter=objecttypecode eq '${entityLogicalName}' and (type eq 2 or type eq 7 or type eq 11)` // Main, QuickCreate, Card
     );
 
     return response.value.map(f => ({
@@ -179,7 +176,7 @@ export class DependencyClient extends DataverseClient {
       }[];
     }>(
       `savedqueries?$select=savedqueryid,name,querytype,layoutxml&` +
-      `$filter=returnedtypecode eq '${entityLogicalName}' and querytype in (0, 1, 2)`
+      `$filter=returnedtypecode eq '${entityLogicalName}' and (querytype eq 0 or querytype eq 1 or querytype eq 2)`
     );
 
     return response.value.map(v => ({
