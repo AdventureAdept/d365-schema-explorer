@@ -43,13 +43,19 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand('d365SchemaExplorer.viewEntityDetails', (item) => {
-            EntityDetailsPanel.createOrShow(context.extensionUri, item);
+            EntityDetailsPanel.createOrShow(context.extensionUri, item, false, false);
         })
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand('d365SchemaExplorer.viewAttributeDetails', (item) => {
-            EntityDetailsPanel.createOrShow(context.extensionUri, item, true);
+            EntityDetailsPanel.createOrShow(context.extensionUri, item, true, false);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('d365SchemaExplorer.viewRelationshipDetails', (item) => {
+            EntityDetailsPanel.createOrShow(context.extensionUri, item, false, true);
         })
     );
 

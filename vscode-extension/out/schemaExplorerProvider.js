@@ -1,162 +1,74 @@
-import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as os from 'os';
-
-// Cache data interfaces matching CLI JSON structure
-interface EntityMetadata {
-    LogicalName: string;
-    SchemaName: string;
-    DisplayName?: { UserLocalizedLabel?: { Label: string } };
-    Description?: { UserLocalizedLabel?: { Label: string } };
-    PrimaryIdAttribute: string;
-    PrimaryNameAttribute?: string;
-    OwnershipType?: string;
-    IsIntersect?: boolean;
-    IsCustomEntity?: boolean;
-    IsManaged?: boolean;
-    EntitySetName?: string;
-    ModifiedOn?: string;
-}
-
-interface AttributeMetadata {
-    LogicalName: string;
-    SchemaName: string;
-    DisplayName?: { UserLocalizedLabel?: { Label: string } };
-    Description?: { UserLocalizedLabel?: { Label: string } };
-    AttributeType?: string;
-    AttributeTypeName?: { Value: string };
-    IsPrimaryId?: boolean;
-    IsPrimaryName?: boolean;
-    RequiredLevel?: { Value: string };
-    IsValidForCreate?: boolean;
-    IsValidForUpdate?: boolean;
-    IsValidForRead?: boolean;
-    IsCustomAttribute?: boolean;
-    MaxLength?: number;
-    MinValue?: number;
-    MaxValue?: number;
-    ModifiedOn?: string;
-}
-
-interface RelationshipMetadata {
-    SchemaName: string;
-    ReferencingEntity?: string;
-    ReferencingAttribute?: string;
-    ReferencedEntity?: string;
-    ReferencedAttribute?: string;
-    RelationshipType?: string;
-    ModifiedOn?: string;
-}
-
-interface CacheData {
-    entities: Record<string, EntityMetadata>;
-    attributes: Record<string, AttributeMetadata[]>;
-    relationships: Record<string, RelationshipMetadata>;
-    metadata: {
-        lastSync?: string;
-        lastFullSync?: string;
-        entityCount?: number;
-        deltaSyncEnabled?: boolean;
-    } | null;
-}
-
-export class SchemaExplorerProvider implements vscode.TreeDataProvider<SchemaItem> {
-    private _onDidChangeTreeData: vscode.EventEmitter<SchemaItem | undefined | null | void> = new vscode.EventEmitter<SchemaItem | undefined | null | void>();
-    readonly onDidChangeTreeData: vscode.Event<SchemaItem | undefined | null | void> = this._onDidChangeTreeData.event;
-
-    private context: vscode.ExtensionContext;
-    private currentClient: string | null = null;
-    private cacheData: CacheData | null = null;
-    private cacheFilePath: string | null = null;
-
-    constructor(context: vscode.ExtensionContext) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SchemaItem = exports.SchemaExplorerProvider = void 0;
+const vscode = require("vscode");
+const path = require("path");
+const fs = require("fs");
+const os = require("os");
+class SchemaExplorerProvider {
+    constructor(context) {
+        this._onDidChangeTreeData = new vscode.EventEmitter();
+        this.onDidChangeTreeData = this._onDidChangeTreeData.event;
+        this.currentClient = null;
+        this.cacheData = null;
+        this.cacheFilePath = null;
         this.context = context;
     }
-
-    refresh(): void {
+    refresh() {
         this.loadCacheData();
         this._onDidChangeTreeData.fire();
     }
-
-    getTreeItem(element: SchemaItem): vscode.TreeItem {
+    getTreeItem(element) {
         return element;
     }
-
-    getChildren(element?: SchemaItem): Thenable<SchemaItem[]> {
+    getChildren(element) {
         if (!this.currentClient || !this.cacheData) {
             return Promise.resolve([new SchemaItem('Connect to Dataverse', vscode.TreeItemCollapsibleState.None, 'connect')]);
         }
-
         if (!element) {
             // Root level - show entities
             return this.getEntities();
         }
-
         if (element.contextValue === 'entity') {
             // Show children: Attributes folder and Relationships folder
             return Promise.resolve([
-                new SchemaItem(
-                    'Attributes',
-                    vscode.TreeItemCollapsibleState.Collapsed,
-                    'attributesFolder',
-                    `${this.cacheData.attributes[element.label]?.length || 0} attributes`,
-                    undefined,
-                    'symbol-folder',
-                    element.label
-                ),
-                new SchemaItem(
-                    'Relationships',
-                    vscode.TreeItemCollapsibleState.Collapsed,
-                    'relationshipsFolder',
-                    undefined,
-                    undefined,
-                    'symbol-interface',
-                    element.label
-                )
+                new SchemaItem('Attributes', vscode.TreeItemCollapsibleState.Collapsed, 'attributesFolder', `${this.cacheData.attributes[element.label]?.length || 0} attributes`, undefined, 'symbol-folder', element.label),
+                new SchemaItem('Relationships', vscode.TreeItemCollapsibleState.Collapsed, 'relationshipsFolder', undefined, undefined, 'symbol-interface', element.label)
             ]);
         }
-
         if (element.contextValue === 'attributesFolder') {
             // Show attributes for this entity
-            return this.getAttributes(element.entityName!);
+            return this.getAttributes(element.entityName);
         }
-
         if (element.contextValue === 'relationshipsFolder') {
             // Show relationships for this entity
-            return this.getRelationships(element.entityName!);
+            return this.getRelationships(element.entityName);
         }
-
         return Promise.resolve([]);
     }
-
-    private loadCacheData(): void {
+    loadCacheData() {
         if (!this.cacheFilePath || !fs.existsSync(this.cacheFilePath)) {
             this.cacheData = null;
             return;
         }
-
         try {
             const content = fs.readFileSync(this.cacheFilePath, 'utf-8');
             this.cacheData = JSON.parse(content);
-        } catch (error) {
+        }
+        catch (error) {
             vscode.window.showErrorMessage(`Error loading cache: ${error}`);
             this.cacheData = null;
         }
     }
-
-    private getEntities(): Promise<SchemaItem[]> {
+    getEntities() {
         if (!this.cacheData?.entities) {
             return Promise.resolve([]);
         }
-
         const config = vscode.workspace.getConfiguration('d365SchemaExplorer');
-        const showSystem = config.get<boolean>('showSystemEntities', true);
-        const showCustom = config.get<boolean>('showCustomEntities', true);
-
+        const showSystem = config.get('showSystemEntities', true);
+        const showCustom = config.get('showCustomEntities', true);
         try {
             let entities = Object.values(this.cacheData.entities);
-
             // Filter by custom/system
             if (!showSystem) {
                 entities = entities.filter(e => e.IsCustomEntity);
@@ -164,140 +76,104 @@ export class SchemaExplorerProvider implements vscode.TreeDataProvider<SchemaIte
             if (!showCustom) {
                 entities = entities.filter(e => !e.IsCustomEntity);
             }
-
             // Sort by logical name
             entities.sort((a, b) => a.LogicalName.localeCompare(b.LogicalName));
-
             return Promise.resolve(entities.map(entity => {
                 const displayName = entity.DisplayName?.UserLocalizedLabel?.Label || '';
                 const icon = entity.IsCustomEntity ? 'package' : 'symbol-class';
-                return new SchemaItem(
-                    entity.LogicalName,
-                    vscode.TreeItemCollapsibleState.Collapsed,
-                    'entity',
-                    displayName,
-                    entity.IsCustomEntity ? 'Custom' : 'System',
-                    icon
-                );
+                return new SchemaItem(entity.LogicalName, vscode.TreeItemCollapsibleState.Collapsed, 'entity', displayName, entity.IsCustomEntity ? 'Custom' : 'System', icon);
             }));
-        } catch (error) {
+        }
+        catch (error) {
             vscode.window.showErrorMessage(`Error loading entities: ${error}`);
             return Promise.resolve([]);
         }
     }
-
-    private getAttributes(entityName: string): Promise<SchemaItem[]> {
+    getAttributes(entityName) {
         if (!this.cacheData?.attributes?.[entityName]) {
             return Promise.resolve([]);
         }
-
         try {
             const attributes = this.cacheData.attributes[entityName];
-            
             // Sort: primary ID first, then primary name, then alphabetically
             attributes.sort((a, b) => {
-                if (a.IsPrimaryId && !b.IsPrimaryId) return -1;
-                if (!a.IsPrimaryId && b.IsPrimaryId) return 1;
-                if (a.IsPrimaryName && !b.IsPrimaryName) return -1;
-                if (!a.IsPrimaryName && b.IsPrimaryName) return 1;
+                if (a.IsPrimaryId && !b.IsPrimaryId)
+                    return -1;
+                if (!a.IsPrimaryId && b.IsPrimaryId)
+                    return 1;
+                if (a.IsPrimaryName && !b.IsPrimaryName)
+                    return -1;
+                if (!a.IsPrimaryName && b.IsPrimaryName)
+                    return 1;
                 return a.LogicalName.localeCompare(b.LogicalName);
             });
-
             return Promise.resolve(attributes.map(attr => {
                 const displayName = attr.DisplayName?.UserLocalizedLabel?.Label || '';
                 const attrType = attr.AttributeType || attr.AttributeTypeName?.Value || 'Unknown';
                 let icon = 'symbol-field';
-                if (attr.IsPrimaryId) icon = 'key';
-                else if (attr.IsPrimaryName) icon = 'symbol-text';
-                else if (attrType === 'Lookup') icon = 'link';
-                else if (attrType === 'Picklist') icon = 'list-unordered';
-
-                return new SchemaItem(
-                    attr.LogicalName,
-                    vscode.TreeItemCollapsibleState.None,
-                    'attribute',
-                    `${displayName} (${attrType})`,
-                    attrType,
-                    icon,
-                    entityName
-                );
+                if (attr.IsPrimaryId)
+                    icon = 'key';
+                else if (attr.IsPrimaryName)
+                    icon = 'symbol-text';
+                else if (attrType === 'Lookup')
+                    icon = 'link';
+                else if (attrType === 'Picklist')
+                    icon = 'list-unordered';
+                return new SchemaItem(attr.LogicalName, vscode.TreeItemCollapsibleState.None, 'attribute', `${displayName} (${attrType})`, attrType, icon, entityName);
             }));
-        } catch (error) {
+        }
+        catch (error) {
             vscode.window.showErrorMessage(`Error loading attributes: ${error}`);
             return Promise.resolve([]);
         }
     }
-
-    private getRelationships(entityName: string): Promise<SchemaItem[]> {
+    getRelationships(entityName) {
         if (!this.cacheData?.relationships) {
             return Promise.resolve([]);
         }
-
         try {
             // Find relationships involving this entity
-            const rels = Object.values(this.cacheData.relationships).filter(rel => 
-                rel.ReferencedEntity === entityName || rel.ReferencingEntity === entityName
-            );
-
+            const rels = Object.values(this.cacheData.relationships).filter(rel => rel.ReferencedEntity === entityName || rel.ReferencingEntity === entityName);
             // Sort by schema name
             rels.sort((a, b) => a.SchemaName.localeCompare(b.SchemaName));
-
             return Promise.resolve(rels.map(rel => {
                 const isReferencing = rel.ReferencingEntity === entityName;
                 const otherEntity = isReferencing ? rel.ReferencedEntity : rel.ReferencingEntity;
                 const direction = isReferencing ? '→' : '←';
                 const description = `${direction} ${otherEntity}`;
-                
-                return new SchemaItem(
-                    rel.SchemaName,
-                    vscode.TreeItemCollapsibleState.None,
-                    'relationship',
-                    description,
-                    rel.RelationshipType,
-                    'link'
-                );
+                return new SchemaItem(rel.SchemaName, vscode.TreeItemCollapsibleState.None, 'relationship', description, rel.RelationshipType, 'link');
             }));
-        } catch (error) {
+        }
+        catch (error) {
             vscode.window.showErrorMessage(`Error loading relationships: ${error}`);
             return Promise.resolve([]);
         }
     }
-
-    async connect(): Promise<void> {
+    async connect() {
         // Get list of available clients from CLI config
         const clientsDir = path.join(os.homedir(), '.d365ai', 'clients');
         if (!fs.existsSync(clientsDir)) {
             vscode.window.showInformationMessage('No clients configured. Use CLI to set up: d365ai env connect');
             return;
         }
-
         const clients = fs.readdirSync(clientsDir)
             .filter(f => f.endsWith('.json') && !f.endsWith('.auth.json') && !f.endsWith('-cache.json'))
             .map(f => f.replace('.json', ''));
-
         if (clients.length === 0) {
             vscode.window.showInformationMessage('No clients configured. Use CLI to set up: d365ai env connect');
             return;
         }
-
         const selected = await vscode.window.showQuickPick(clients, {
             placeHolder: 'Select a client to connect to'
         });
-
         if (selected) {
             await this.connectToClient(selected);
         }
     }
-
-    async connectToClient(clientName: string): Promise<void> {
+    async connectToClient(clientName) {
         const cacheFile = path.join(os.homedir(), '.d365ai', 'clients', `${clientName}-cache.json`);
-
         if (!fs.existsSync(cacheFile)) {
-            const action = await vscode.window.showWarningMessage(
-                `No schema cache found for ${clientName}. Run 'd365ai schema pull' first.`,
-                'Pull Now',
-                'Cancel'
-            );
+            const action = await vscode.window.showWarningMessage(`No schema cache found for ${clientName}. Run 'd365ai schema pull' first.`, 'Pull Now', 'Cancel');
             if (action === 'Pull Now') {
                 // Run CLI command to pull schema
                 const terminal = vscode.window.createTerminal('D365 Schema Pull');
@@ -306,139 +182,108 @@ export class SchemaExplorerProvider implements vscode.TreeDataProvider<SchemaIte
             }
             return;
         }
-
         this.cacheFilePath = cacheFile;
         this.currentClient = clientName;
         this.loadCacheData();
         this.refresh();
         vscode.window.showInformationMessage(`Connected to ${clientName}`);
     }
-
-    async disconnect(): Promise<void> {
+    async disconnect() {
         this.cacheData = null;
         this.cacheFilePath = null;
         this.currentClient = null;
         this.refresh();
         vscode.window.showInformationMessage('Disconnected');
     }
-
-    async search(): Promise<void> {
+    async search() {
         if (!this.currentClient || !this.cacheData) {
             vscode.window.showInformationMessage('Please connect to a Dataverse environment first');
             return;
         }
-
         const query = await vscode.window.showInputBox({
             placeHolder: 'Search entities and attributes...',
             prompt: 'Enter search term'
         });
-
-        if (!query) return;
-
+        if (!query)
+            return;
         const lowerQuery = query.toLowerCase();
-        const items: Array<{ item: SchemaItem; type: string; sortKey: string }> = [];
-
+        const items = [];
         // Search entities
         for (const entity of Object.values(this.cacheData.entities)) {
             const logicalName = entity.LogicalName.toLowerCase();
             const schemaName = entity.SchemaName.toLowerCase();
             const displayName = (entity.DisplayName?.UserLocalizedLabel?.Label || '').toLowerCase();
-            
             if (logicalName.includes(lowerQuery) || schemaName.includes(lowerQuery) || displayName.includes(lowerQuery)) {
-                const item = new SchemaItem(
-                    entity.LogicalName,
-                    vscode.TreeItemCollapsibleState.Collapsed,
-                    'entity',
-                    entity.DisplayName?.UserLocalizedLabel?.Label || '',
-                    entity.IsCustomEntity ? 'Custom' : 'System',
-                    entity.IsCustomEntity ? 'package' : 'symbol-class'
-                );
+                const item = new SchemaItem(entity.LogicalName, vscode.TreeItemCollapsibleState.Collapsed, 'entity', entity.DisplayName?.UserLocalizedLabel?.Label || '', entity.IsCustomEntity ? 'Custom' : 'System', entity.IsCustomEntity ? 'package' : 'symbol-class');
                 items.push({ item, type: 'entity', sortKey: `1_${entity.LogicalName}` });
             }
         }
-
         // Search attributes
         for (const [entityName, attributes] of Object.entries(this.cacheData.attributes)) {
             for (const attr of attributes) {
                 const logicalName = attr.LogicalName.toLowerCase();
                 const displayName = (attr.DisplayName?.UserLocalizedLabel?.Label || '').toLowerCase();
-                
                 if (logicalName.includes(lowerQuery) || displayName.includes(lowerQuery)) {
                     const attrType = attr.AttributeType || attr.AttributeTypeName?.Value || 'Unknown';
-                    const item = new SchemaItem(
-                        attr.LogicalName,
-                        vscode.TreeItemCollapsibleState.None,
-                        'attribute',
-                        `${entityName} (${attrType})`,
-                        attrType,
-                        'symbol-field',
-                        entityName
-                    );
+                    const item = new SchemaItem(attr.LogicalName, vscode.TreeItemCollapsibleState.None, 'attribute', `${entityName} (${attrType})`, attrType, 'symbol-field', entityName);
                     items.push({ item, type: 'attribute', sortKey: `2_${entityName}_${attr.LogicalName}` });
                 }
             }
         }
-
         // Sort results
         items.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-
         const quickPickItems = items.map(({ item, type }) => ({
             label: type === 'entity' ? `$(symbol-class) ${item.label}` : `$(symbol-field) ${item.label}`,
             description: item.description || '',
             detail: type === 'entity' ? 'Entity' : `Attribute in ${item.entityName}`,
             item: item
         }));
-
         const selected = await vscode.window.showQuickPick(quickPickItems, {
             placeHolder: `Found ${items.length} results`
         });
-
         if (selected) {
             const selectedItem = selected.item;
-            
             if (selectedItem.contextValue === 'entity') {
                 // Reveal entity in tree
                 this._onDidChangeTreeData.fire();
                 // Note: VS Code doesn't have a direct API to reveal an item,
                 // but we can open the details panel
                 vscode.commands.executeCommand('d365SchemaExplorer.viewEntityDetails', selectedItem);
-            } else if (selectedItem.contextValue === 'attribute') {
+            }
+            else if (selectedItem.contextValue === 'attribute') {
                 // Open attribute details
                 vscode.commands.executeCommand('d365SchemaExplorer.viewAttributeDetails', selectedItem);
             }
         }
     }
-
-    async exportEntity(item: SchemaItem): Promise<void> {
-        if (!item || item.contextValue !== 'entity') return;
-
-        const entityName = item.label as string;
+    async exportEntity(item) {
+        if (!item || item.contextValue !== 'entity')
+            return;
+        const entityName = item.label;
         const format = await vscode.window.showQuickPick(['JSON', 'Markdown'], {
             placeHolder: 'Select export format'
         });
-
-        if (!format) return;
-
+        if (!format)
+            return;
         const uri = await vscode.window.showSaveDialog({
             defaultUri: vscode.Uri.file(`${entityName}.${format.toLowerCase()}`),
-            filters: format === 'JSON' 
+            filters: format === 'JSON'
                 ? { 'JSON': ['json'] }
                 : { 'Markdown': ['md'] }
         });
-
-        if (!uri) return;
-
+        if (!uri)
+            return;
         try {
             if (format === 'JSON') {
                 const entity = this.cacheData?.entities?.[entityName];
                 const attributes = this.cacheData?.attributes?.[entityName];
                 const fullEntity = { ...entity, Attributes: attributes };
                 fs.writeFileSync(uri.fsPath, JSON.stringify(fullEntity, null, 2));
-            } else {
+            }
+            else {
                 // Generate Markdown
                 const entity = this.cacheData?.entities?.[entityName];
                 const attributes = this.cacheData?.attributes?.[entityName] || [];
-                
                 let md = `# ${entity?.DisplayName?.UserLocalizedLabel?.Label || entityName}\n\n`;
                 md += `**Logical Name:** ${entity?.LogicalName}\n`;
                 md += `**Schema Name:** ${entity?.SchemaName}\n`;
@@ -448,62 +293,57 @@ export class SchemaExplorerProvider implements vscode.TreeDataProvider<SchemaIte
                 md += `\n## Attributes\n\n`;
                 md += `| Name | Type | Display Name |\n`;
                 md += `|------|------|-------------|\n`;
-                
                 for (const attr of attributes) {
                     const attrType = attr.AttributeType || attr.AttributeTypeName?.Value || '';
                     const attrDisplayName = attr.DisplayName?.UserLocalizedLabel?.Label || '';
                     md += `| ${attr.LogicalName} | ${attrType} | ${attrDisplayName} |\n`;
                 }
-                
                 fs.writeFileSync(uri.fsPath, md);
             }
-
             vscode.window.showInformationMessage(`Exported ${entityName} to ${uri.fsPath}`);
-        } catch (error) {
+        }
+        catch (error) {
             vscode.window.showErrorMessage(`Export failed: ${error}`);
         }
     }
-
-    getCurrentClient(): string | null {
+    getCurrentClient() {
         return this.currentClient;
     }
-
-    getCacheData(): CacheData | null {
+    getCacheData() {
         return this.cacheData;
     }
 }
-
-export class SchemaItem extends vscode.TreeItem {
-    constructor(
-        public readonly label: string,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly contextValue: string,
-        public readonly description?: string,
-        public readonly tooltip?: string,
-        public readonly iconName?: string,
-        public readonly entityName?: string
-    ) {
+exports.SchemaExplorerProvider = SchemaExplorerProvider;
+class SchemaItem extends vscode.TreeItem {
+    constructor(label, collapsibleState, contextValue, description, tooltip, iconName, entityName) {
         super(label, collapsibleState);
+        this.label = label;
+        this.collapsibleState = collapsibleState;
+        this.contextValue = contextValue;
+        this.description = description;
+        this.tooltip = tooltip;
+        this.iconName = iconName;
+        this.entityName = entityName;
         this.description = description;
         this.tooltip = tooltip || description;
-        
         if (iconName) {
             this.iconPath = new vscode.ThemeIcon(iconName);
         }
-
         if (contextValue === 'entity') {
             this.command = {
                 command: 'd365SchemaExplorer.viewEntityDetails',
                 title: 'View Details',
                 arguments: [this]
             };
-        } else if (contextValue === 'attribute') {
+        }
+        else if (contextValue === 'attribute') {
             this.command = {
                 command: 'd365SchemaExplorer.viewAttributeDetails',
                 title: 'View Details',
                 arguments: [this]
             };
-        } else if (contextValue === 'relationship') {
+        }
+        else if (contextValue === 'relationship') {
             this.command = {
                 command: 'd365SchemaExplorer.viewRelationshipDetails',
                 title: 'View Details',
@@ -512,3 +352,5 @@ export class SchemaItem extends vscode.TreeItem {
         }
     }
 }
+exports.SchemaItem = SchemaItem;
+//# sourceMappingURL=schemaExplorerProvider.js.map

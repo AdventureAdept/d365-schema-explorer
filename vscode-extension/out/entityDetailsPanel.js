@@ -1,157 +1,72 @@
-import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as os from 'os';
-
-// Cache data interfaces matching CLI JSON structure
-interface EntityMetadata {
-    LogicalName: string;
-    SchemaName: string;
-    DisplayName?: { UserLocalizedLabel?: { Label: string } };
-    Description?: { UserLocalizedLabel?: { Label: string } };
-    PrimaryIdAttribute: string;
-    PrimaryNameAttribute?: string;
-    OwnershipType?: string;
-    IsIntersect?: boolean;
-    IsCustomEntity?: boolean;
-    IsManaged?: boolean;
-    EntitySetName?: string;
-    ModifiedOn?: string;
-}
-
-interface AttributeMetadata {
-    LogicalName: string;
-    SchemaName: string;
-    DisplayName?: { UserLocalizedLabel?: { Label: string } };
-    Description?: { UserLocalizedLabel?: { Label: string } };
-    AttributeType?: string;
-    AttributeTypeName?: { Value: string };
-    IsPrimaryId?: boolean;
-    IsPrimaryName?: boolean;
-    RequiredLevel?: { Value: string };
-    IsValidForCreate?: boolean;
-    IsValidForUpdate?: boolean;
-    IsValidForRead?: boolean;
-    IsCustomAttribute?: boolean;
-    MaxLength?: number;
-    MinValue?: number;
-    MaxValue?: number;
-    ModifiedOn?: string;
-}
-
-interface RelationshipMetadata {
-    SchemaName: string;
-    ReferencingEntity?: string;
-    ReferencingAttribute?: string;
-    ReferencedEntity?: string;
-    ReferencedAttribute?: string;
-    RelationshipType?: string;
-    ModifiedOn?: string;
-}
-
-interface CacheData {
-    entities: Record<string, EntityMetadata>;
-    attributes: Record<string, AttributeMetadata[]>;
-    relationships: Record<string, RelationshipMetadata>;
-    metadata: {
-        lastSync?: string;
-        lastFullSync?: string;
-        entityCount?: number;
-        deltaSyncEnabled?: boolean;
-    } | null;
-}
-
-export class EntityDetailsPanel {
-    public static currentPanel: EntityDetailsPanel | undefined;
-    public static readonly viewType = 'entityDetails';
-
-    private readonly _panel: vscode.WebviewPanel;
-    private readonly _extensionUri: vscode.Uri;
-    private _disposables: vscode.Disposable[] = [];
-    private _item: any;
-    private _isAttribute: boolean;
-    private _isRelationship: boolean;
-
-    public static createOrShow(extensionUri: vscode.Uri, item: any, isAttribute: boolean = false, isRelationship: boolean = false) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.EntityDetailsPanel = void 0;
+const vscode = require("vscode");
+const path = require("path");
+const fs = require("fs");
+const os = require("os");
+class EntityDetailsPanel {
+    static createOrShow(extensionUri, item, isAttribute = false, isRelationship = false) {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
-
         // If we already have a panel, show it
         if (EntityDetailsPanel.currentPanel) {
             EntityDetailsPanel.currentPanel._panel.reveal(column);
             EntityDetailsPanel.currentPanel._update(item, isAttribute, isRelationship);
             return;
         }
-
         // Otherwise, create a new panel
-        const title = isRelationship 
-            ? `Relationship: ${item.label}` 
-            : isAttribute 
-                ? `Attribute: ${item.label}` 
+        const title = isRelationship
+            ? `Relationship: ${item.label}`
+            : isAttribute
+                ? `Attribute: ${item.label}`
                 : `Entity: ${item.label}`;
-        
-        const panel = vscode.window.createWebviewPanel(
-            EntityDetailsPanel.viewType,
-            title,
-            column || vscode.ViewColumn.One,
-            {
-                enableScripts: true,
-                localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
-            }
-        );
-
+        const panel = vscode.window.createWebviewPanel(EntityDetailsPanel.viewType, title, column || vscode.ViewColumn.One, {
+            enableScripts: true,
+            localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
+        });
         EntityDetailsPanel.currentPanel = new EntityDetailsPanel(panel, extensionUri, item, isAttribute, isRelationship);
     }
-
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, item: any, isAttribute: boolean, isRelationship: boolean) {
+    constructor(panel, extensionUri, item, isAttribute, isRelationship) {
+        this._disposables = [];
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._item = item;
         this._isAttribute = isAttribute;
         this._isRelationship = isRelationship;
-
         // Set the webview's initial html content
         this._update(item, isAttribute, isRelationship);
-
         // Listen for when the panel is disposed
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-
         // Update the content based on view changes
-        this._panel.onDidChangeViewState(
-            e => {
-                if (this._panel.visible) {
-                    this._update(this._item, this._isAttribute, this._isRelationship);
-                }
-            },
-            null,
-            this._disposables
-        );
+        this._panel.onDidChangeViewState(e => {
+            if (this._panel.visible) {
+                this._update(this._item, this._isAttribute, this._isRelationship);
+            }
+        }, null, this._disposables);
     }
-
-    private _update(item: any, isAttribute: boolean, isRelationship: boolean) {
+    _update(item, isAttribute, isRelationship) {
         this._item = item;
         this._isAttribute = isAttribute;
         this._isRelationship = isRelationship;
         const webview = this._panel.webview;
-        
-        let title: string;
+        let title;
         if (isRelationship) {
             title = `Relationship: ${item.label}`;
-        } else if (isAttribute) {
+        }
+        else if (isAttribute) {
             title = `Attribute: ${item.label}`;
-        } else {
+        }
+        else {
             title = `Entity: ${item.label}`;
         }
-        
         this._panel.title = title;
         webview.html = this._getHtmlForWebview(webview, item, isAttribute, isRelationship);
     }
-
-    private _getHtmlForWebview(webview: vscode.Webview, item: any, isAttribute: boolean, isRelationship: boolean): string {
+    _getHtmlForWebview(webview, item, isAttribute, isRelationship) {
         const name = item.label;
         const configDir = path.join(os.homedir(), '.d365ai');
-        
         // Find the active client
         const configPath = path.join(configDir, 'config.json');
         let clientName = '';
@@ -159,52 +74,48 @@ export class EntityDetailsPanel {
             const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
             clientName = config.activeClient;
         }
-
         if (!clientName) {
             return this._getErrorHtml('No active client');
         }
-
         const cacheFilePath = path.join(configDir, 'clients', `${clientName}-cache.json`);
         if (!fs.existsSync(cacheFilePath)) {
             return this._getErrorHtml('No schema cache found');
         }
-
-        let cacheData: CacheData;
+        let cacheData;
         try {
             const content = fs.readFileSync(cacheFilePath, 'utf-8');
             cacheData = JSON.parse(content);
-        } catch (error) {
+        }
+        catch (error) {
             return this._getErrorHtml(`Failed to read cache: ${error}`);
         }
-
         if (isRelationship) {
             const relationship = cacheData.relationships?.[name];
             if (!relationship) {
                 return this._getErrorHtml('Relationship not found');
             }
             return this._getRelationshipHtml(relationship);
-        } else if (isAttribute) {
+        }
+        else if (isAttribute) {
             const entityName = item.entityName;
             const attribute = cacheData.attributes?.[entityName]?.find(a => a.LogicalName === name);
             if (!attribute) {
                 return this._getErrorHtml('Attribute not found');
             }
             return this._getAttributeHtml(attribute, entityName);
-        } else {
+        }
+        else {
             const entity = cacheData.entities?.[name];
             if (!entity) {
                 return this._getErrorHtml('Entity not found');
             }
             const attributes = cacheData.attributes?.[name] || [];
-            const relationships = Object.values(cacheData.relationships || {}).filter(r => 
-                r.ReferencedEntity === name || r.ReferencingEntity === name
-            );
+            const relationships = Object.values(cacheData.relationships || {}).filter(r => r.ReferencedEntity === name || r.ReferencingEntity === name);
             return this._getEntityHtml(entity, attributes, relationships);
         }
     }
-
-    private _getEntityHtml(entity: EntityMetadata, attributes: AttributeMetadata[], relationships: RelationshipMetadata[]): string {
-        const attributesHtml = attributes.map((attr: AttributeMetadata) => {
+    _getEntityHtml(entity, attributes, relationships) {
+        const attributesHtml = attributes.map((attr) => {
             const attrType = attr.AttributeType || attr.AttributeTypeName?.Value || 'Unknown';
             return `
             <tr>
@@ -215,9 +126,9 @@ export class EntityDetailsPanel {
                 <td>${attr.IsPrimaryName ? '✓' : ''}</td>
                 <td>${attr.IsCustomAttribute ? '✓' : ''}</td>
             </tr>
-        `}).join('');
-
-        const relationshipsHtml = relationships.map((rel: RelationshipMetadata) => `
+        `;
+        }).join('');
+        const relationshipsHtml = relationships.map((rel) => `
             <tr>
                 <td>${rel.SchemaName}</td>
                 <td>${rel.RelationshipType || 'Unknown'}</td>
@@ -225,9 +136,7 @@ export class EntityDetailsPanel {
                 <td>${rel.ReferencedEntity || ''}</td>
             </tr>
         `).join('');
-
         const description = entity.Description?.UserLocalizedLabel?.Label || '';
-
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
@@ -390,11 +299,9 @@ export class EntityDetailsPanel {
             </body>
             </html>`;
     }
-
-    private _getAttributeHtml(data: AttributeMetadata, entityName: string): string {
+    _getAttributeHtml(data, entityName) {
         const attrType = data.AttributeType || data.AttributeTypeName?.Value || 'Unknown';
         const description = data.Description?.UserLocalizedLabel?.Label || '';
-
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
@@ -527,8 +434,7 @@ export class EntityDetailsPanel {
             </body>
             </html>`;
     }
-
-    private _getRelationshipHtml(data: RelationshipMetadata): string {
+    _getRelationshipHtml(data) {
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
@@ -625,8 +531,7 @@ export class EntityDetailsPanel {
             </body>
             </html>`;
     }
-
-    private _getErrorHtml(message: string): string {
+    _getErrorHtml(message) {
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
@@ -657,12 +562,9 @@ export class EntityDetailsPanel {
             </body>
             </html>`;
     }
-
-    public dispose() {
+    dispose() {
         EntityDetailsPanel.currentPanel = undefined;
-
         this._panel.dispose();
-
         while (this._disposables.length) {
             const x = this._disposables.pop();
             if (x) {
@@ -671,3 +573,6 @@ export class EntityDetailsPanel {
         }
     }
 }
+exports.EntityDetailsPanel = EntityDetailsPanel;
+EntityDetailsPanel.viewType = 'entityDetails';
+//# sourceMappingURL=entityDetailsPanel.js.map
