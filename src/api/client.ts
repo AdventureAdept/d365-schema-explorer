@@ -104,7 +104,7 @@ export class DataverseClient {
    * Get entity attributes with optional delta sync
    */
   async getEntityAttributes(logicalName: string, sinceTimestamp?: string): Promise<AttributeMetadata[]> {
-    let endpoint = `EntityDefinitions(LogicalName='${logicalName}')/Attributes?$select=LogicalName,SchemaName,DisplayName,Description,AttributeType,AttributeTypeName,IsPrimaryId,IsPrimaryName,RequiredLevel,IsValidForCreate,IsValidForUpdate,IsValidForRead,IsCustomAttribute,MaxLength,MinValue,MaxValue,ModifiedOn`;
+    let endpoint = `EntityDefinitions(LogicalName='${logicalName}')/Attributes?$select=LogicalName,SchemaName,DisplayName,Description,AttributeType,AttributeTypeName,IsPrimaryId,IsPrimaryName,RequiredLevel,IsValidForCreate,IsValidForUpdate,IsValidForRead,IsCustomAttribute,ModifiedOn`;
     
     if (sinceTimestamp) {
       const encodedTimestamp = encodeURIComponent(sinceTimestamp);
