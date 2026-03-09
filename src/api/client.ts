@@ -26,7 +26,7 @@ export class DataverseClient {
     };
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  protected async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const headers = await this.getHeaders();
     const url = `${this.orgUrl}/api/data/v9.2/${endpoint}`;
 

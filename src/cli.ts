@@ -9,6 +9,7 @@ import * as path from 'path';
 import { useCommand } from './commands/use';
 import { connectCommand, disconnectCommand, statusCommand, listClientsCommand } from './commands/env';
 import { pullCommand, searchCommand, exportCommand, listEntitiesCommand, syncStatusCommand } from './commands/schema';
+import { analyzeCommand, graphCommand, reportCommand } from './commands/impact';
 
 // Read package.json for version
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
@@ -121,6 +122,46 @@ schemaCommand
   .description('List all cached entities')
   .action(async () => {
     await listEntitiesCommand();
+  });
+
+// ============================================
+// Impact commands
+// ============================================
+
+const impactCommand = program
+  .command('impact')
+  .description('Analyze dependencies and impact of schema changes');
+
+impactCommand
+  .command('analyze [target]')
+  .description('Analyze impact of changes on an entity or field')
+  .option('-e, --entity <entity>', 'Entity logical name')
+  .option('-f, --field <field>', 'Field logical name (requires --entity)')
+  .action(async (target: string, options) => {
+    await analyzeCommand(target, options);
+  });
+
+impactCommand
+  .command('graph [target]')
+  .description('Generate dependency graph (Mermaid, DOT, or JSON)')
+  .option('-e, --entity <entity>', 'Entity logical name')
+  .option('-f, --field <field>', 'Field logical name (requires --entity)')
+  .option('--format <format>', 'Output format (mermaid, dot, json)', 'mermaid')
+  .option('-o, --output <path>', 'Output file path')
+  .option('--direction <dir>', 'Graph direction (TB, BT, LR, RL)', 'TB')
+  .action(async (target: string, options) => {
+    await graphCommand(target, options);
+  });
+
+impactCommand
+  .command('report [target]')
+  .description('Generate detailed impact report')
+  .option('-e, --entity <entity>', 'Entity logical name')
+  .option('-f, --field <field>', 'Field logical name (requires --entity)')
+  .option('--format <format>', 'Report format (markdown, json)', 'markdown')
+  .option('-o, --output <path>', 'Output file path')
+  .action(async (target: string, options) => {
+    await reportCommand(target, options);
   });
 
 // ============================================
