@@ -1,11 +1,11 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import { EntityMetadata, CacheMetadata } from '../types';
+import { EntityMetadata, AttributeMetadata, CacheMetadata, DeltaSyncResult } from '../types';
 
 interface CacheData {
   entities: Record<string, EntityMetadata>;
-  attributes: Record<string, any[]>;
+  attributes: Record<string, AttributeMetadata[]>;
   relationships: Record<string, any[]>;
   metadata: CacheMetadata | null;
 }
@@ -91,17 +91,17 @@ export class CacheManager {
   }
 
   // Attribute operations
-  upsertAttributes(entityName: string, attributes: any[]): void {
+  upsertAttributes(entityName: string, attributes: AttributeMetadata[]): void {
     this.data.attributes[entityName] = attributes;
   }
 
-  getAttributes(entityName: string): any[] {
+  getAttributes(entityName: string): AttributeMetadata[] {
     return this.data.attributes[entityName] || [];
   }
 
-  searchAttributes(query: string): Array<{ entityName: string; attribute: any }> {
+  searchAttributes(query: string): Array<{ entityName: string; attribute: AttributeMetadata }> {
     const lowerQuery = query.toLowerCase();
-    const results: Array<{ entityName: string; attribute: any }> = [];
+    const results: Array<{ entityName: string; attribute: AttributeMetadata }> = [];
     
     for (const [entityName, attributes] of Object.entries(this.data.attributes)) {
       for (const attr of attributes) {
@@ -152,6 +152,153 @@ export class CacheManager {
 
   getCacheMetadata(): CacheMetadata | null {
     return this.data.metadata;
+  }
+
+  // Delta sync operations
+  getLastSyncTimestamp(): string | null {
+    return this.data.metadata?.lastSync || null;
+  }
+
+  getLastFullSyncTimestamp(): string | null {
+    return this.data.metadata?.lastFullSync || null;
+  }
+
+  /**
+   * Perform delta sync - merge changes into existing cache
+   */
+  performDeltaSync(
+    newEntities: EntityMetadata[],
+    newAttributes: Record<string, AttributeMetadata[]>,
+    newRelationships: { manyToOne: any[]; oneToMany: any[]; manyToMany: any[] }
+  ): DeltaSyncResult {
+    const result: DeltaSyncResult = {
+      entitiesAdded: 0,
+      entitiesUpdated: 0,
+      entitiesDeleted: 0,
+      attributesAdded: 0,
+      attributesUpdated: 0,
+      relationshipsAdded: 0,
+      relationshipsUpdated: 0,
+      lastSync: new Date().toISOString(),
+    };
+
+    // Process entities
+    const existingEntityNames = new Set(Object.keys(this.data.entities));
+    const newEntityNames = new Set(newEntities.map(e => e.LogicalName));
+
+    for (const entity of newEntities) {
+      const existing = this.data.entities[entity.LogicalName];
+      
+      if (!existing) {
+        // New entity
+        this.data.entities[entity.LogicalName] = entity;
+        result.entitiesAdded++;
+      } else if (this.isEntityChanged(existing, entity)) {
+        // Updated entity
+        this.data.entities[entity.LogicalName] = { ...existing, ...entity };
+        result.entitiesUpdated++;
+      }
+    }
+
+    // Mark deleted entities (optional - could also just keep them)
+    for (const existingName of existingEntityNames) {
+      if (!newEntityNames.has(existingName)) {
+        result.entitiesDeleted++;
+        // Optionally delete: delete this.data.entities[existingName];
+      }
+    }
+
+    // Process attributes
+    for (const [entityName, attributes] of Object.entries(newAttributes)) {
+      const existingAttrs = this.data.attributes[entityName] || [];
+      const existingAttrMap = new Map(existingAttrs.map(a => [a.LogicalName, a]));
+
+      for (const attr of attributes) {
+        const existing = existingAttrMap.get(attr.LogicalName);
+        
+        if (!existing) {
+          result.attributesAdded++;
+        } else if (this.isAttributeChanged(existing, attr)) {
+          result.attributesUpdated++;
+        }
+      }
+
+      this.data.attributes[entityName] = attributes;
+    }
+
+    // Process relationships
+    const allNewRels = [
+      ...newRelationships.manyToOne.map(r => ({ ...r, RelationshipType: 'ManyToOne' })),
+      ...newRelationships.oneToMany.map(r => ({ ...r, RelationshipType: 'OneToMany' })),
+      ...newRelationships.manyToMany.map(r => ({ ...r, RelationshipType: 'ManyToMany' })),
+    ];
+
+    for (const rel of allNewRels) {
+      const existing = this.data.relationships[rel.SchemaName];
+      if (!existing) {
+        result.relationshipsAdded++;
+      } else if (this.isRelationshipChanged(existing, rel)) {
+        result.relationshipsUpdated++;
+      }
+      this.data.relationships[rel.SchemaName] = rel;
+    }
+
+    // Update metadata
+    this.data.metadata = {
+      ...this.data.metadata,
+      lastSync: result.lastSync,
+      entityCount: Object.keys(this.data.entities).length,
+      deltaSyncEnabled: true,
+    };
+
+    this.save();
+    return result;
+  }
+
+  /**
+   * Check if entity has changed by comparing ModifiedOn timestamps
+   */
+  private isEntityChanged(existing: EntityMetadata, incoming: EntityMetadata): boolean {
+    if (!incoming.ModifiedOn) return true; // If no timestamp, assume changed
+    if (!existing.ModifiedOn) return true; // If existing has no timestamp, update
+    return new Date(incoming.ModifiedOn) > new Date(existing.ModifiedOn);
+  }
+
+  /**
+   * Check if attribute has changed
+   */
+  private isAttributeChanged(existing: AttributeMetadata, incoming: AttributeMetadata): boolean {
+    if (!incoming.ModifiedOn) return true;
+    if (!existing.ModifiedOn) return true;
+    return new Date(incoming.ModifiedOn) > new Date(existing.ModifiedOn);
+  }
+
+  /**
+   * Check if relationship has changed
+   */
+  private isRelationshipChanged(existing: any, incoming: any): boolean {
+    if (!incoming.ModifiedOn) return false; // Relationships often don't have ModifiedOn
+    if (!existing.ModifiedOn) return true;
+    return new Date(incoming.ModifiedOn) > new Date(existing.ModifiedOn);
+  }
+
+  /**
+   * Get statistics about the cache
+   */
+  getCacheStats(): {
+    entityCount: number;
+    attributeCount: number;
+    relationshipCount: number;
+    lastSync: string | null;
+    lastFullSync: string | null;
+  } {
+    return {
+      entityCount: Object.keys(this.data.entities).length,
+      attributeCount: Object.values(this.data.attributes).reduce((sum, attrs) => sum + attrs.length, 0),
+      relationshipCount: Object.keys(this.data.relationships).length,
+      lastSync: this.data.metadata?.lastSync || null,
+      lastFullSync: this.data.metadata?.lastFullSync || null,
+    };
   }
 
   // Utility

@@ -1,5 +1,5 @@
 import { AuthManager } from '../auth/manager';
-import { EntityMetadata } from '../types';
+import { EntityMetadata, AttributeMetadata } from '../types';
 
 export class DataverseClient {
   private orgUrl: string;
@@ -7,7 +7,7 @@ export class DataverseClient {
   private clientName: string;
 
   constructor(orgUrl: string, authManager: AuthManager, clientName: string) {
-    this.orgUrl = orgUrl.replace(/\/$/, ''); // Remove trailing slash
+    this.orgUrl = orgUrl.replace(/\/+$/, ''); // Remove trailing slashes
     this.authManager = authManager;
     this.clientName = clientName;
   }
@@ -65,22 +65,68 @@ export class DataverseClient {
     return this.request('WhoAmI');
   }
 
-  async getEntityDefinitions(): Promise<EntityMetadata[]> {
-    const response = await this.request<{ value: EntityMetadata[] }>(
-      'EntityDefinitions?$select=LogicalName,SchemaName,DisplayName,Description,PrimaryIdAttribute,PrimaryNameAttribute,OwnershipType,IsIntersect,IsCustomEntity,IsManaged,EntitySetName'
-    );
+  /**
+   * Get entity definitions with optional delta sync
+   * @param sinceTimestamp - If provided, only returns entities modified after this timestamp
+   */
+  async getEntityDefinitions(sinceTimestamp?: string): Promise<EntityMetadata[]> {
+    let endpoint = 'EntityDefinitions?$select=LogicalName,SchemaName,DisplayName,Description,PrimaryIdAttribute,PrimaryNameAttribute,OwnershipType,IsIntersect,IsCustomEntity,IsManaged,EntitySetName,ModifiedOn';
+    
+    // Add delta filter if timestamp provided
+    if (sinceTimestamp) {
+      const encodedTimestamp = encodeURIComponent(sinceTimestamp);
+      endpoint += `&$filter=ModifiedOn gt ${encodedTimestamp}`;
+    }
+
+    const response = await this.request<{ value: EntityMetadata[] }>(endpoint);
     return response.value;
+  }
+
+  /**
+   * Get all entity definitions (for full sync)
+   */
+  async getAllEntityDefinitions(): Promise<EntityMetadata[]> {
+    return this.getEntityDefinitions();
+  }
+
+  /**
+   * Get entity definitions modified since a specific timestamp (delta sync)
+   */
+  async getEntityDefinitionsDelta(sinceTimestamp: string): Promise<EntityMetadata[]> {
+    return this.getEntityDefinitions(sinceTimestamp);
   }
 
   async getEntityDefinition(logicalName: string): Promise<EntityMetadata> {
     return this.request(`EntityDefinitions(LogicalName='${logicalName}')`);
   }
 
-  async getEntityAttributes(logicalName: string): Promise<EntityMetadata['Attributes']> {
-    const response = await this.request<{ value: EntityMetadata['Attributes'] }>(
-      `EntityDefinitions(LogicalName='${logicalName}')/Attributes?$select=LogicalName,SchemaName,DisplayName,Description,AttributeType,AttributeTypeName,IsPrimaryId,IsPrimaryName,RequiredLevel,IsValidForCreate,IsValidForUpdate,IsValidForRead,IsCustomAttribute,MaxLength,MinValue,MaxValue`
-    );
+  /**
+   * Get entity attributes with optional delta sync
+   */
+  async getEntityAttributes(logicalName: string, sinceTimestamp?: string): Promise<AttributeMetadata[]> {
+    let endpoint = `EntityDefinitions(LogicalName='${logicalName}')/Attributes?$select=LogicalName,SchemaName,DisplayName,Description,AttributeType,AttributeTypeName,IsPrimaryId,IsPrimaryName,RequiredLevel,IsValidForCreate,IsValidForUpdate,IsValidForRead,IsCustomAttribute,MaxLength,MinValue,MaxValue,ModifiedOn`;
+    
+    if (sinceTimestamp) {
+      const encodedTimestamp = encodeURIComponent(sinceTimestamp);
+      endpoint += `&$filter=ModifiedOn gt ${encodedTimestamp}`;
+    }
+
+    const response = await this.request<{ value: AttributeMetadata[] }>(endpoint);
     return response.value;
+  }
+
+  /**
+   * Get all attributes for an entity (for full sync)
+   */
+  async getAllEntityAttributes(logicalName: string): Promise<AttributeMetadata[]> {
+    return this.getEntityAttributes(logicalName);
+  }
+
+  /**
+   * Get attributes modified since a specific timestamp (delta sync)
+   */
+  async getEntityAttributesDelta(logicalName: string, sinceTimestamp: string): Promise<AttributeMetadata[]> {
+    return this.getEntityAttributes(logicalName, sinceTimestamp);
   }
 
   async getEntityRelationships(logicalName: string): Promise<{
@@ -120,6 +166,106 @@ export class DataverseClient {
       ManyToOneRelationships: relationships.manyToOne,
       OneToManyRelationships: relationships.oneToMany,
       ManyToManyRelationships: relationships.manyToMany,
+    };
+  }
+
+  /**
+   * Perform delta sync - get all changes since last sync
+   */
+  async performDeltaSync(sinceTimestamp: string): Promise<{
+    entities: EntityMetadata[];
+    attributes: Record<string, AttributeMetadata[]>;
+    relationships: {
+      manyToOne: any[];
+      oneToMany: any[];
+      manyToMany: any[];
+    };
+  }> {
+    // Get modified entities
+    const modifiedEntities = await this.getEntityDefinitionsDelta(sinceTimestamp);
+    
+    // For each modified entity, get modified attributes
+    const modifiedAttributes: Record<string, AttributeMetadata[]> = {};
+    for (const entity of modifiedEntities) {
+      modifiedAttributes[entity.LogicalName] = await this.getEntityAttributesDelta(
+        entity.LogicalName,
+        sinceTimestamp
+      );
+    }
+
+    // Get all relationships (relationships don't always have ModifiedOn)
+    // We'll fetch relationships for all modified entities
+    const relationships = {
+      manyToOne: [] as any[],
+      oneToMany: [] as any[],
+      manyToMany: [] as any[],
+    };
+
+    for (const entity of modifiedEntities) {
+      const entityRels = await this.getEntityRelationships(entity.LogicalName);
+      if (entityRels.manyToOne) {
+        relationships.manyToOne.push(...entityRels.manyToOne);
+      }
+      if (entityRels.oneToMany) {
+        relationships.oneToMany.push(...entityRels.oneToMany);
+      }
+      if (entityRels.manyToMany) {
+        relationships.manyToMany.push(...entityRels.manyToMany);
+      }
+    }
+
+    return {
+      entities: modifiedEntities,
+      attributes: modifiedAttributes,
+      relationships,
+    };
+  }
+
+  /**
+   * Perform full sync - get all metadata
+   */
+  async performFullSync(): Promise<{
+    entities: EntityMetadata[];
+    attributes: Record<string, AttributeMetadata[]>;
+    relationships: {
+      manyToOne: any[];
+      oneToMany: any[];
+      manyToMany: any[];
+    };
+  }> {
+    // Get all entities
+    const entities = await this.getAllEntityDefinitions();
+    
+    // Get all attributes for each entity
+    const attributes: Record<string, AttributeMetadata[]> = {};
+    for (const entity of entities) {
+      attributes[entity.LogicalName] = await this.getAllEntityAttributes(entity.LogicalName);
+    }
+
+    // Get all relationships
+    const relationships = {
+      manyToOne: [] as any[],
+      oneToMany: [] as any[],
+      manyToMany: [] as any[],
+    };
+
+    for (const entity of entities) {
+      const entityRels = await this.getEntityRelationships(entity.LogicalName);
+      if (entityRels.manyToOne) {
+        relationships.manyToOne.push(...entityRels.manyToOne);
+      }
+      if (entityRels.oneToMany) {
+        relationships.oneToMany.push(...entityRels.oneToMany);
+      }
+      if (entityRels.manyToMany) {
+        relationships.manyToMany.push(...entityRels.manyToMany);
+      }
+    }
+
+    return {
+      entities,
+      attributes,
+      relationships,
     };
   }
 

@@ -19,6 +19,7 @@ export interface EntityMetadata {
   IsCustomEntity?: boolean;
   IsManaged?: boolean;
   EntitySetName?: string;
+  ModifiedOn?: string; // Added for delta sync
   Attributes?: AttributeMetadata[];
   ManyToOneRelationships?: RelationshipMetadata[];
   OneToManyRelationships?: RelationshipMetadata[];
@@ -57,6 +58,7 @@ export interface AttributeMetadata {
   MaxValue?: number;
   OptionSet?: OptionSetMetadata;
   Targets?: string[];
+  ModifiedOn?: string; // Added for delta sync
 }
 
 // Option set metadata
@@ -81,6 +83,7 @@ export interface RelationshipMetadata {
   ReferencedEntity?: string;
   ReferencedAttribute?: string;
   RelationshipType?: string;
+  ModifiedOn?: string; // Added for delta sync
 }
 
 // Many-to-many relationship metadata
@@ -89,6 +92,7 @@ export interface ManyToManyRelationshipMetadata {
   Entity1LogicalName?: string;
   Entity2LogicalName?: string;
   IntersectEntityName?: string;
+  ModifiedOn?: string; // Added for delta sync
 }
 
 // Client configuration
@@ -131,9 +135,23 @@ export interface ExportOptions {
 // Cache metadata
 export interface CacheMetadata {
   lastSync?: string;
+  lastFullSync?: string;
   entityCount?: number;
   version?: string;
   checksum?: string;
+  deltaSyncEnabled?: boolean; // Added for delta sync
+}
+
+// Delta sync result
+export interface DeltaSyncResult {
+  entitiesAdded: number;
+  entitiesUpdated: number;
+  entitiesDeleted: number;
+  attributesAdded: number;
+  attributesUpdated: number;
+  relationshipsAdded: number;
+  relationshipsUpdated: number;
+  lastSync: string;
 }
 
 // CLI context passed to commands

@@ -8,7 +8,7 @@ import * as path from 'path';
 // Import commands
 import { useCommand } from './commands/use';
 import { connectCommand, disconnectCommand, statusCommand, listClientsCommand } from './commands/env';
-import { pullCommand, searchCommand, exportCommand, listEntitiesCommand } from './commands/schema';
+import { pullCommand, searchCommand, exportCommand, listEntitiesCommand, syncStatusCommand } from './commands/schema';
 
 // Read package.json for version
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
@@ -44,7 +44,7 @@ const envCommand = program
 
 envCommand
   .command('connect')
-  .description('Connect to a Dataverse environment (MSAL device flow)')
+  .description('Connect to a Dataverse environment (MSAL device flow or service principal)')
   .action(async () => {
     await connectCommand();
   });
@@ -80,11 +80,19 @@ const schemaCommand = program
 
 schemaCommand
   .command('pull')
-  .description('Pull schema metadata from Dataverse')
-  .option('-f, --full', 'Pull full metadata including attributes and relationships')
-  .option('--force', 'Force full refresh of cache')
+  .description('Pull schema metadata from Dataverse (auto-detects delta vs full sync)')
+  .option('-f, --full', 'Force full metadata pull including all attributes and relationships')
+  .option('--force', 'Force full refresh of cache (ignore existing data)')
+  .option('--delta', 'Force delta sync (only fetch changes since last sync)')
   .action(async (options) => {
     await pullCommand(options);
+  });
+
+schemaCommand
+  .command('sync-status')
+  .description('Show sync status and cache statistics')
+  .action(async () => {
+    await syncStatusCommand();
   });
 
 schemaCommand
