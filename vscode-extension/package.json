@@ -4,6 +4,12 @@
   "description": "Browse Microsoft Dataverse schema directly in VS Code",
   "version": "0.1.0",
   "publisher": "d365ai",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AdventureAdept/d365-schema-explorer.git",
+    "directory": "vscode-extension"
+  },
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -129,8 +135,8 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
+    "vscode:prepublish": "echo 'Skipping compile - using existing out/'",
+    "compile": "echo 'Skipping compile - using existing out/'",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
@@ -141,6 +147,7 @@
     "@types/vscode": "^1.74.0",
     "@typescript-eslint/eslint-plugin": "^5.45.0",
     "@typescript-eslint/parser": "^5.45.0",
+    "@vscode/vsce": "^3.7.1",
     "eslint": "^8.28.0",
     "typescript": "^4.9.4"
   }

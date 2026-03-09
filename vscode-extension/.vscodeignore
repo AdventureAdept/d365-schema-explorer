@@ -1,0 +1,12 @@
+src/**
+**/*.ts
+**/*.map
+.gitignore
+**/.eslintrc.json
+**/.eslintignore
+**/.prettierrc
+node_modules/**
+.vscode/**
+package-lock.json
+tsconfig.json
+*.vsix
