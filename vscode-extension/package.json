@@ -1,0 +1,142 @@
+{
+  "name": "d365-schema-explorer",
+  "displayName": "D365 Schema Explorer",
+  "description": "Browse Microsoft Dataverse schema directly in VS Code",
+  "version": "0.1.0",
+  "publisher": "d365ai",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Data Science",
+    "Debuggers"
+  ],
+  "keywords": [
+    "d365",
+    "dataverse",
+    "dynamics",
+    "crm",
+    "schema",
+    "metadata"
+  ],
+  "activationEvents": [
+    "onView:d365SchemaExplorer"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "d365SchemaExplorer.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "d365SchemaExplorer.connect",
+        "title": "Connect to Dataverse",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "d365SchemaExplorer.disconnect",
+        "title": "Disconnect",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "d365SchemaExplorer.search",
+        "title": "Search Schema",
+        "icon": "$(search)"
+      },
+      {
+        "command": "d365SchemaExplorer.exportEntity",
+        "title": "Export Entity",
+        "icon": "$(export)"
+      },
+      {
+        "command": "d365SchemaExplorer.viewEntityDetails",
+        "title": "View Entity Details"
+      },
+      {
+        "command": "d365SchemaExplorer.viewAttributeDetails",
+        "title": "View Attribute Details"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "d365SchemaExplorer",
+          "name": "D365 Schema Explorer",
+          "when": "true"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "d365SchemaExplorer.connect",
+          "when": "view == d365SchemaExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "d365SchemaExplorer.refresh",
+          "when": "view == d365SchemaExplorer",
+          "group": "navigation@2"
+        },
+        {
+          "command": "d365SchemaExplorer.search",
+          "when": "view == d365SchemaExplorer",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "d365SchemaExplorer.exportEntity",
+          "when": "view == d365SchemaExplorer && viewItem == entity",
+          "group": "inline"
+        },
+        {
+          "command": "d365SchemaExplorer.viewEntityDetails",
+          "when": "view == d365SchemaExplorer && viewItem == entity"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "D365 Schema Explorer",
+      "properties": {
+        "d365SchemaExplorer.defaultClient": {
+          "type": "string",
+          "default": "",
+          "description": "Default client to connect to on startup"
+        },
+        "d365SchemaExplorer.showSystemEntities": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show system entities in the tree view"
+        },
+        "d365SchemaExplorer.showCustomEntities": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show custom entities in the tree view"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "16.x",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "eslint": "^8.28.0",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.0"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "d365ai",
+  "version": "0.1.0",
+  "description": "D365 Schema Explorer - CLI and VS Code extension for browsing Dataverse schema",
+  "main": "dist/index.js",
+  "bin": {
+    "d365ai": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/cli.ts",
+    "start": "node dist/cli.js",
+    "watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/**/*.ts"
+  },
+  "keywords": [
+    "d365",
+    "dataverse",
+    "schema",
+    "cli",
+    "vscode"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@azure/msal-node": "^2.6.0",
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "conf": "^10.2.0",
+    "dotenv": "^16.4.1",
+    "inquirer": "^8.2.6",
+    "ora": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^8.2.10",
+    "@types/node": "^20.11.16",
+    "pac-cli": "^1.0.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
