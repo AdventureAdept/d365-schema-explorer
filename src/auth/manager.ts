@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { PublicClientApplication, AuthenticationResult, DeviceCodeRequest } from '@azure/msal-node';
+import { PublicClientApplication, ConfidentialClientApplication, AuthenticationResult, DeviceCodeRequest, ClientCredentialRequest } from '@azure/msal-node';
 import { ConfigManager } from '../config/manager';
 import { TokenInfo } from '../types';
 
@@ -51,7 +51,7 @@ export class AuthManager {
     }
   }
 
-  private getMsalApp(tenantId: string, clientId: string): PublicClientApplication {
+  private getMsalPublicApp(tenantId: string, clientId: string): PublicClientApplication {
     return new PublicClientApplication({
       auth: {
         clientId: clientId,
@@ -60,15 +60,27 @@ export class AuthManager {
     });
   }
 
-  async authenticate(orgUrl: string, tenantId?: string, clientId?: string): Promise<TokenInfo> {
-    // Extract tenant ID from org URL if not provided
+  private getMsalConfidentialApp(tenantId: string, clientId: string, clientSecret: string): ConfidentialClientApplication {
+    return new ConfidentialClientApplication({
+      auth: {
+        clientId: clientId,
+        authority: `https://login.microsoftonline.com/${tenantId}`,
+        clientSecret: clientSecret,
+      },
+    });
+  }
+
+  async authenticate(orgUrl: string, tenantId?: string, clientId?: string, clientSecret?: string): Promise<TokenInfo> {
     const effectiveTenantId = tenantId || this.extractTenantId(orgUrl);
     const effectiveClientId = clientId || DEFAULT_CLIENT_ID;
-
-    const msalApp = this.getMsalApp(effectiveTenantId, effectiveClientId);
-
     const scope = `${orgUrl}/.default`;
-    
+
+    if (clientSecret) {
+      return this.authenticateWithClientCredentials(orgUrl, effectiveTenantId, effectiveClientId, clientSecret);
+    }
+
+    const msalApp = this.getMsalPublicApp(effectiveTenantId, effectiveClientId);
+
     const deviceCodeRequest: DeviceCodeRequest = {
       scopes: [scope],
       deviceCodeCallback: (response) => {
@@ -79,38 +91,58 @@ export class AuthManager {
 
     try {
       const response = await msalApp.acquireTokenByDeviceCode(deviceCodeRequest);
-      
+
       if (!response) {
         throw new Error('Authentication failed - no response');
       }
 
-      const tokenInfo: TokenInfo = {
+      return {
         accessToken: response.accessToken,
         expiresOn: new Date(response.expiresOn?.getTime() || Date.now() + 3600000),
         acquiredAt: new Date(),
       };
-
-      return tokenInfo;
     } catch (error: any) {
       throw new Error(`Authentication failed: ${error.message}`);
     }
   }
 
+  private async authenticateWithClientCredentials(orgUrl: string, tenantId: string, clientId: string, clientSecret: string): Promise<TokenInfo> {
+    const msalApp = this.getMsalConfidentialApp(tenantId, clientId, clientSecret);
+    const scope = `${orgUrl}/.default`;
+
+    try {
+      const response = await msalApp.acquireTokenByClientCredential({ scopes: [scope] });
+
+      if (!response) {
+        throw new Error('Authentication failed - no response');
+      }
+
+      return {
+        accessToken: response.accessToken,
+        expiresOn: new Date(response.expiresOn?.getTime() || Date.now() + 3600000),
+        acquiredAt: new Date(),
+      };
+    } catch (error: any) {
+      throw new Error(`Client credentials authentication failed: ${error.message}`);
+    }
+  }
+
   async refreshToken(clientName: string): Promise<TokenInfo | null> {
-    const token = this.getTokenInfo(clientName);
-    if (!token?.refreshToken) {
-      return null;
-    }
-
     const clientConfig = this.configManager.getClient(clientName);
-    if (!clientConfig) {
+    if (!clientConfig?.clientSecret || !clientConfig.tenantId || !clientConfig.clientId) {
       return null;
     }
 
-    // MSAL handles refresh tokens internally for confidential clients
-    // For public clients with device code, we need to re-authenticate
-    // This is a limitation of device code flow
-    return null;
+    try {
+      return await this.authenticateWithClientCredentials(
+        clientConfig.orgUrl,
+        clientConfig.tenantId,
+        clientConfig.clientId,
+        clientConfig.clientSecret,
+      );
+    } catch {
+      return null;
+    }
   }
 
   private extractTenantId(orgUrl: string): string {
@@ -123,7 +155,13 @@ export class AuthManager {
   async getAccessToken(clientName: string): Promise<string | null> {
     const token = this.getTokenInfo(clientName);
     if (!token) {
-      return null;
+      // No cached token — try client credentials if configured
+      const newToken = await this.refreshToken(clientName);
+      if (!newToken) {
+        return null;
+      }
+      this.saveTokenInfo(clientName, newToken);
+      return newToken.accessToken;
     }
 
     // Check if token is expired (with 5 minute buffer)
@@ -137,6 +175,7 @@ export class AuthManager {
       if (!newToken) {
         return null;
       }
+      this.saveTokenInfo(clientName, newToken);
       return newToken.accessToken;
     }
 

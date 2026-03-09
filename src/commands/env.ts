@@ -51,6 +51,12 @@ export async function connectCommand(): Promise<void> {
       message: 'Client ID (leave empty for default):',
       default: '51f81489-12ee-4a9e-aaae-a2591f45987d',
     },
+    {
+      type: 'password',
+      name: 'clientSecret',
+      message: 'Client Secret (leave empty to use device code flow):',
+      default: '',
+    },
   ]);
 
   // Check if client already exists
@@ -75,6 +81,7 @@ export async function connectCommand(): Promise<void> {
     orgUrl: answers.orgUrl,
     tenantId: answers.tenantId,
     clientId: answers.clientId,
+    ...(answers.clientSecret ? { clientSecret: answers.clientSecret } : {}),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -88,7 +95,8 @@ export async function connectCommand(): Promise<void> {
     const token = await auth.authenticate(
       answers.orgUrl,
       answers.tenantId,
-      answers.clientId
+      answers.clientId,
+      answers.clientSecret || undefined
     );
     
     auth.saveAuth(answers.clientName, token);

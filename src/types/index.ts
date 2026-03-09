@@ -97,6 +97,7 @@ export interface ClientConfig {
   orgUrl: string;
   tenantId?: string;
   clientId?: string;
+  clientSecret?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -7,8 +7,8 @@ D365 Schema Explorer is a CLI tool for browsing Microsoft Dataverse schema metad
 ## Features
 
 - **Multi-client configuration** — Manage connections to multiple Dataverse environments
-- **MSAL authentication** — Secure device flow authentication with Microsoft
-- **Local schema cache** — SQLite-based caching with delta-sync support
+- **MSAL authentication** — Device flow or service principal (client credentials) with automatic token refresh
+- **Local schema cache** — JSON file caching with delta-sync support
 - **Fast search** — Search entities, fields, and relationships locally
 - **Export capabilities** — Export schema as JSON or Markdown
 - **VS Code ready** — Designed to work as both CLI and VS Code extension
@@ -45,6 +45,7 @@ d365ai env connect
 # - Client name (friendly name for this connection)
 # - Tenant ID (optional, defaults to 'organizations')
 # - Client ID (optional, uses default public client)
+# - Client Secret (optional, enables automatic token refresh via service principal)
 ```
 
 ### 2. Pull Schema Metadata
@@ -94,16 +95,18 @@ Switch between configured clients.
 ```bash
 # Switch to a specific client
 d365ai use production
-
-# Interactive selection (if no client specified)
-d365ai use
 ```
 
 ### `d365ai env`
 Manage environment connections.
 
 #### `d365ai env connect`
-Connect to a Dataverse environment using MSAL device flow.
+Connect to a Dataverse environment. Prompts for:
+- Organization URL
+- Client name
+- Tenant ID
+- Client ID
+- Client Secret *(optional — leave blank for device code flow)*
 
 #### `d365ai env disconnect`
 Disconnect from current environment and clear cached tokens.
@@ -148,11 +151,9 @@ List all cached entities.
 ```
 ~/.d365ai/
 ├── config.json              # Active client and settings
-├── clients/
-│   ├── production.json      # Client configuration
-│   ├── production.auth.json # Cached authentication
-│   └── production.db        # SQLite schema cache
-└── development.db
+└── clients/
+    ├── production.json      # Client configuration
+    └── production.auth.json # Cached authentication token
 ```
 
 ### Client Configuration File
@@ -162,11 +163,43 @@ List all cached entities.
   "name": "production",
   "orgUrl": "https://yourorg.crm.dynamics.com",
   "tenantId": "your-tenant-id",
-  "clientId": "51f81489-12ee-4a9e-aaae-a2591f45987d",
+  "clientId": "your-app-client-id",
+  "clientSecret": "your-client-secret",
   "createdAt": "2024-03-08T10:00:00.000Z",
   "updatedAt": "2024-03-08T10:00:00.000Z"
 }
 ```
+
+`clientSecret` is optional. When present, the CLI uses client credentials flow and automatically refreshes tokens without any user interaction.
+
+## Authentication
+
+### Device Code Flow (default)
+
+Used when no `clientSecret` is configured. On first connect, the user authenticates once via browser. The access token is cached but expires after ~1 hour, requiring re-authentication.
+
+### Client Credentials Flow (service principal)
+
+Used when a `clientSecret` is present in the client config. Tokens are fetched and refreshed automatically — no user interaction required after initial setup. Recommended for CI/CD or persistent developer environments.
+
+**Setup steps:**
+
+1. **Register an Azure AD app**
+   - Azure Portal → Azure Active Directory → App registrations → New registration
+
+2. **Create a client secret**
+   - App registration → Certificates & secrets → New client secret
+   - Note the secret value (shown once only)
+
+3. **Grant Dataverse permission**
+   - App registration → API permissions → Add permission
+   - Select *Dynamics CRM* → *user_impersonation* (delegated) or application permission
+   - Grant admin consent
+
+4. **Add as Application User in Dataverse**
+   - Power Platform Admin Center → Environments → your environment → Settings → Users + permissions → Application users
+   - Add the app registration
+   - Assign a security role (e.g., *System Customizer* for read access to schema)
 
 ## Architecture
 
@@ -182,12 +215,12 @@ d365-schema-explorer/
 │   │   ├── env.ts
 │   │   └── schema.ts
 │   ├── auth/               # Authentication
-│   │   └── manager.ts      # MSAL integration
+│   │   └── manager.ts      # MSAL integration (device code + client credentials)
 │   ├── api/                # Dataverse API
 │   │   ├── client.ts       # WebAPI client
 │   │   └── mock-client.ts  # Mock client for testing
 │   ├── cache/              # Schema caching
-│   │   └── manager.ts      # SQLite cache manager
+│   │   └── manager.ts      # JSON file cache manager
 │   ├── config/             # Configuration
 │   │   └── manager.ts      # Client config manager
 │   └── types/              # TypeScript types
@@ -202,20 +235,21 @@ d365-schema-explorer/
 
 #### AuthManager (`src/auth/manager.ts`)
 - MSAL Node.js integration
-- Device code flow authentication
-- Token caching and refresh
+- Device code flow for interactive authentication
+- Client credentials flow for service principal (non-interactive)
+- Automatic token refresh — when a token is missing or expired and `clientSecret` is configured, a new token is acquired silently
 - Multi-client token management
 
 #### DataverseClient (`src/api/client.ts`)
-- Dataverse WebAPI integration
+- Dataverse WebAPI v9.2 integration
 - Entity metadata retrieval
 - Attribute and relationship fetching
 - Search functionality
 
 #### CacheManager (`src/cache/manager.ts`)
-- SQLite database for local caching
+- JSON file-based local caching per client
 - Entity, attribute, and relationship storage
-- Full-text search capabilities
+- Search across cached data
 - Delta-sync support
 
 #### ConfigManager (`src/config/manager.ts`)
@@ -238,15 +272,19 @@ GET /api/data/v9.2/EntityDefinitions(LogicalName='{entity}')/OneToManyRelationsh
 GET /api/data/v9.2/EntityDefinitions(LogicalName='{entity}')/ManyToManyRelationships
 ```
 
-### Authentication
+### Authentication Flows
 
-Uses MSAL (Microsoft Authentication Library) with device code flow:
-
+**Device code flow:**
 1. User initiates connection
 2. CLI requests device code from Microsoft
 3. User authenticates at https://microsoft.com/devicelogin
 4. CLI receives access token
-5. Token cached locally for subsequent requests
+5. Token cached locally
+
+**Client credentials flow:**
+1. CLI reads `clientSecret` from client config
+2. CLI requests token from Azure AD using app credentials
+3. Token cached locally and refreshed automatically on expiry
 
 ## Testing
 
@@ -257,10 +295,6 @@ Test without a real Dataverse environment:
 ```bash
 # Run mock tests
 ./test-mock.sh
-
-# Or manually
-npm run build
-node dist/test-mock.js
 ```
 
 Mock data includes:
@@ -309,8 +343,11 @@ npm run dev -- env connect
 **Problem:** Device code flow fails
 **Solution:** Ensure you complete authentication at microsoft.com/devicelogin within the time limit
 
-**Problem:** Token expired
-**Solution:** Run `d365ai env connect` again to re-authenticate
+**Problem:** Token expired (device code flow)
+**Solution:** Run `d365ai env connect` again to re-authenticate, or switch to client credentials flow
+
+**Problem:** Client credentials flow returns 403
+**Solution:** Ensure the Application User has been assigned a security role in Dataverse with the required privileges
 
 ### Cache Issues
 
@@ -318,12 +355,12 @@ npm run dev -- env connect
 **Solution:** Run `d365ai schema pull --force` to refresh cache
 
 **Problem:** Cache corruption
-**Solution:** Delete `~/.d365ai/clients/*.db` files and re-pull
+**Solution:** Delete `~/.d365ai/clients/*.auth.json` and re-pull
 
 ### Connection Issues
 
 **Problem:** Cannot connect to Dataverse
-**Solution:** 
+**Solution:**
 - Verify organization URL
 - Check network connectivity
 - Ensure you have appropriate permissions
