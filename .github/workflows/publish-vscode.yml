@@ -1,0 +1,21 @@
+name: Publish VS Code Extension
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: cd vscode-extension && npm ci
+      - run: cd vscode-extension && npm run package
+      - uses: HaaLeo/publish-vscode-extension@v1
+        with:
+          pat: ${{ secrets.VSCE_PAT }}
+          packagePath: vscode-extension

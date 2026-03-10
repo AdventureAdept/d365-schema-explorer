@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { escapeHtml } from '../../src/webview/sanitize';
 
 // Cache data interfaces matching CLI JSON structure
 interface EntityMetadata {
@@ -233,7 +234,7 @@ export class EntityDetailsPanel {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Entity: ${entity.LogicalName}</title>
+                <title>Entity: ${escapeHtml(entity.LogicalName)}</title>
                 <style>
                     body {
                         font-family: var(--vscode-font-family);

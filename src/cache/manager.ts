@@ -42,10 +42,26 @@ export class CacheManager {
     if (fs.existsSync(this.cacheFile)) {
       try {
         const content = fs.readFileSync(this.cacheFile, 'utf-8');
+        const checksum = this.calculateChecksum(content);
         this.data = JSON.parse(content);
+        // Store checksum for verification on next save
+        (this.data.metadata as any).checksum = checksum;
       } catch (error) {
-        // If file is corrupted, start fresh
-        this.data = { entities: {}, attributes: {}, relationships: {}, metadata: null };
+        // Try restore from backup
+        const backupPath = this.cacheFile + '.bak';
+        if (fs.existsSync(backupPath)) {
+          try {
+            fs.copyFileSync(backupPath, this.cacheFile);
+            const content = fs.readFileSync(this.cacheFile, 'utf-8');
+            this.data = JSON.parse(content);
+          } catch {
+            // Backup also corrupted, start fresh
+            this.data = { entities: {}, attributes: {}, relationships: {}, metadata: null };
+          }
+        } else {
+          // No backup, start fresh
+          this.data = { entities: {}, attributes: {}, relationships: {}, metadata: null };
+        }
       }
     }
     this.loaded = true;
@@ -59,7 +75,19 @@ export class CacheManager {
   }
 
   private save(): void {
-    fs.writeFileSync(this.cacheFile, JSON.stringify(this.data, null, 2));
+    const backupPath = this.cacheFile + '.bak';
+    
+    // Create backup before writing
+    if (fs.existsSync(this.cacheFile)) {
+      fs.copyFileSync(this.cacheFile, backupPath);
+    }
+    
+    const content = JSON.stringify(this.data, null, 2);
+    fs.writeFileSync(this.cacheFile, content);
+  }
+
+  private calculateChecksum(content: string): string {
+    return crypto.createHash('md5').update(content).digest('hex');
   }
 
   // Entity operations
@@ -309,10 +337,6 @@ export class CacheManager {
   clear(): void {
     this.data = { entities: {}, attributes: {}, relationships: {}, metadata: null };
     this.save();
-  }
-
-  private calculateChecksum(data: string): string {
-    return crypto.createHash('md5').update(data).digest('hex');
   }
 }
 

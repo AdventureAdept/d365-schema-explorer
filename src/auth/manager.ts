@@ -3,6 +3,8 @@ import * as path from 'path';
 import { PublicClientApplication, ConfidentialClientApplication, AuthenticationResult, DeviceCodeRequest, ClientCredentialRequest } from '@azure/msal-node';
 import { ConfigManager } from '../config/manager';
 import { TokenInfo } from '../types';
+import { saveToken, getToken, deleteToken } from './token-storage';
+import { tokenRefreshLock } from '../utils/async-lock';
 
 // Default client ID for Dataverse
 const DEFAULT_CLIENT_ID = '51f81489-12ee-4a9e-aaae-a2591f45987d';
@@ -20,34 +22,40 @@ export class AuthManager {
     return path.join(this.configManager.getClientsDir(), `${clientName}.auth.json`);
   }
 
-  private getTokenInfo(clientName: string): TokenInfo | null {
-    const authPath = this.getAuthPath(clientName);
-    if (!fs.existsSync(authPath)) {
+  private async getTokenInfo(clientName: string): Promise<TokenInfo | null> {
+    const accessToken = await getToken(clientName);
+    if (!accessToken) {
       return null;
     }
-    const data = JSON.parse(fs.readFileSync(authPath, 'utf-8'));
+    // Store metadata (expiresOn, acquiredAt) in a separate non-sensitive file
+    const metadataPath = path.join(this.configManager.getClientsDir(), `${clientName}.auth.meta.json`);
+    let metadata: { expiresOn: string; acquiredAt: string } = { expiresOn: new Date().toISOString(), acquiredAt: new Date().toISOString() };
+    if (fs.existsSync(metadataPath)) {
+      metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+    }
     return {
-      accessToken: data.accessToken,
-      expiresOn: new Date(data.expiresOn),
-      refreshToken: data.refreshToken,
-      acquiredAt: new Date(data.acquiredAt),
+      accessToken,
+      expiresOn: new Date(metadata.expiresOn),
+      refreshToken: undefined,
+      acquiredAt: new Date(metadata.acquiredAt),
     };
   }
 
-  private saveTokenInfo(clientName: string, token: TokenInfo): void {
-    const authPath = this.getAuthPath(clientName);
-    fs.writeFileSync(authPath, JSON.stringify({
-      accessToken: token.accessToken,
+  private async saveTokenInfo(clientName: string, token: TokenInfo): Promise<void> {
+    await saveToken(clientName, token.accessToken);
+    // Store metadata (expiresOn, acquiredAt) in a separate non-sensitive file
+    const metadataPath = path.join(this.configManager.getClientsDir(), `${clientName}.auth.meta.json`);
+    fs.writeFileSync(metadataPath, JSON.stringify({
       expiresOn: token.expiresOn.toISOString(),
-      refreshToken: token.refreshToken,
       acquiredAt: token.acquiredAt.toISOString(),
     }, null, 2));
   }
 
-  private deleteTokenInfo(clientName: string): void {
-    const authPath = this.getAuthPath(clientName);
-    if (fs.existsSync(authPath)) {
-      fs.unlinkSync(authPath);
+  private async deleteTokenInfo(clientName: string): Promise<void> {
+    await deleteToken(clientName);
+    const metadataPath = path.join(this.configManager.getClientsDir(), `${clientName}.auth.meta.json`);
+    if (fs.existsSync(metadataPath)) {
+      fs.unlinkSync(metadataPath);
     }
   }
 
@@ -153,15 +161,20 @@ export class AuthManager {
   }
 
   async getAccessToken(clientName: string): Promise<string | null> {
-    const token = this.getTokenInfo(clientName);
+    const token = await this.getTokenInfo(clientName);
     if (!token) {
       // No cached token — try client credentials if configured
-      const newToken = await this.refreshToken(clientName);
-      if (!newToken) {
-        return null;
+      await tokenRefreshLock.acquire('token-refresh');
+      try {
+        const newToken = await this.refreshToken(clientName);
+        if (!newToken) {
+          return null;
+        }
+        await this.saveTokenInfo(clientName, newToken);
+        return newToken.accessToken;
+      } finally {
+        tokenRefreshLock.release('token-refresh');
       }
-      this.saveTokenInfo(clientName, newToken);
-      return newToken.accessToken;
     }
 
     // Check if token is expired (with 5 minute buffer)
@@ -171,12 +184,17 @@ export class AuthManager {
     
     if (expiresOn.getTime() - now.getTime() < bufferMs) {
       // Token is expired or about to expire
-      const newToken = await this.refreshToken(clientName);
-      if (!newToken) {
-        return null;
+      await tokenRefreshLock.acquire('token-refresh');
+      try {
+        const newToken = await this.refreshToken(clientName);
+        if (!newToken) {
+          return null;
+        }
+        await this.saveTokenInfo(clientName, newToken);
+        return newToken.accessToken;
+      } finally {
+        tokenRefreshLock.release('token-refresh');
       }
-      this.saveTokenInfo(clientName, newToken);
-      return newToken.accessToken;
     }
 
     return token.accessToken;
@@ -187,12 +205,12 @@ export class AuthManager {
     return token !== null;
   }
 
-  saveAuth(clientName: string, token: TokenInfo): void {
-    this.saveTokenInfo(clientName, token);
+  async saveAuth(clientName: string, token: TokenInfo): Promise<void> {
+    await this.saveTokenInfo(clientName, token);
   }
 
-  clearAuth(clientName: string): void {
-    this.deleteTokenInfo(clientName);
+  async clearAuth(clientName: string): Promise<void> {
+    await this.deleteTokenInfo(clientName);
   }
 }
 

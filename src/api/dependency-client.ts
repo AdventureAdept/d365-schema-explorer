@@ -206,4 +206,139 @@ export class DependencyClient extends DataverseClient {
     // Parse layout XML to check for field reference
     return layoutXml.includes(fieldLogicalName);
   }
+
+  /**
+   * Get workflow details with XAML for field dependency analysis
+   */
+  async getWorkflowDetails(workflowId: string): Promise<{
+    workflowId: string;
+    name: string;
+    xaml: string;
+    inputParameters: string;
+  } | null> {
+    try {
+      const response = await this.request<{
+        workflowid: string;
+        name: string;
+        xaml: string;
+        inputparameters: string;
+      }>(`workflows(${workflowId})?$select=workflowid,name,xaml,inputparameters`);
+
+      return {
+        workflowId: response.workflowid,
+        name: response.name,
+        xaml: response.xaml || '',
+        inputParameters: response.inputparameters || '',
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Check if a field is used in workflow XAML
+   */
+  isFieldUsedInWorkflow(fieldLogicalName: string, xaml: string): boolean {
+    if (!xaml) return false;
+    
+    // Check for field reference in workflow XAML
+    // Workflow XAML contains field references in various formats:
+    // - <x:Reference>fieldname</x:Reference>
+    // - AttributeName="fieldname"
+    // - Property name="fieldname"
+    const patterns = [
+      new RegExp(`<[^>]*>${fieldLogicalName}</[^>]*>`, 'i'),
+      new RegExp(`AttributeName="${fieldLogicalName}"`, 'i'),
+      new RegExp(`Property name="${fieldLogicalName}"`, 'i'),
+      new RegExp(`<x:Reference[^>]*>${fieldLogicalName}</x:Reference>`, 'i'),
+      new RegExp(`Field name="${fieldLogicalName}"`, 'i'),
+    ];
+
+    return patterns.some(pattern => pattern.test(xaml));
+  }
+
+  /**
+   * Get reports for an entity
+   */
+  async getReportsForEntity(entityLogicalName: string): Promise<{
+    reportId: string;
+    name: string;
+    entityLogicalName: string;
+    reportTypeCode: number;
+  }[]> {
+    try {
+      const response = await this.request<{
+        value: {
+          reportid: string;
+          name: string;
+          reporttypecode: number;
+          primaryentity: string;
+        }[];
+      }>(
+        `reports?$select=reportid,name,reporttypecode,primaryentity&` +
+        `$filter=primaryentity eq '${entityLogicalName}' and ispersonal eq false`
+      );
+
+      return response.value.map(r => ({
+        reportId: r.reportid,
+        name: r.name,
+        entityLogicalName: r.primaryentity || entityLogicalName,
+        reportTypeCode: r.reporttypecode,
+      }));
+    } catch (error) {
+      return [];
+    }
+  }
+
+  /**
+   * Get recursive dependencies using RetrieveDependenciesForDelete
+   * This follows the dependency chain to find indirect dependencies
+   */
+  async getRecursiveDependencies(
+    objectId: string,
+    componentType: number,
+    maxDepth: number = 3
+  ): Promise<ComponentDependency[]> {
+    const allDependencies = new Map<string, ComponentDependency>();
+    const visited = new Set<string>();
+    
+    const queue: Array<{ id: string; type: number; depth: number }> = [
+      { id: objectId, type: componentType, depth: 0 }
+    ];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const key = `${current.type}:${current.id}`;
+      
+      if (visited.has(key) || current.depth >= maxDepth) {
+        continue;
+      }
+      
+      visited.add(key);
+
+      try {
+        const deps = await this.retrieveDependenciesForDelete(current.id, current.type);
+        
+        for (const dep of deps) {
+          const depKey = `${dep.dependentComponentType}:${dep.dependentComponentObjectId}`;
+          
+          if (!allDependencies.has(depKey)) {
+            allDependencies.set(depKey, dep);
+            
+            // Add to queue for further traversal
+            queue.push({
+              id: dep.dependentComponentObjectId,
+              type: dep.dependentComponentType,
+              depth: current.depth + 1
+            });
+          }
+        }
+      } catch (error) {
+        // Continue with other nodes if one fails
+        console.warn(`Failed to get dependencies for ${key}:`, error);
+      }
+    }
+
+    return Array.from(allDependencies.values());
+  }
 }

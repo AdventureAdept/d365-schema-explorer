@@ -216,6 +216,31 @@ export class GraphBuilder {
     } catch (error) {
       console.warn(`Failed to get views for ${entityLogicalName}:`, error);
     }
+
+    // Get reports
+    try {
+      const reports = await this.dependencyClient.getReportsForEntity(entityLogicalName);
+      for (const report of reports) {
+        const reportNode: DependencyNode = {
+          id: `report:${report.reportId}`,
+          type: 'report',
+          name: report.name,
+          entityName: entityLogicalName,
+          dependencies: [entityNode.id],
+          dependedOnBy: [],
+          metadata: {
+            componentId: report.reportId,
+            componentType: 'report',
+            riskLevel: 'low',
+            description: `Report Type: ${report.reportTypeCode}`,
+          },
+        };
+        nodes.set(reportNode.id, reportNode);
+        entityNode.dependedOnBy.push(reportNode.id);
+      }
+    } catch (error) {
+      console.warn(`Failed to get reports for ${entityLogicalName}:`, error);
+    }
   }
 
   /**
@@ -281,8 +306,40 @@ export class GraphBuilder {
       console.warn(`Failed to get views for ${entityLogicalName}:`, error);
     }
 
-    // Get workflows (simplified - would need to parse workflow XAML)
-    // This is a placeholder for workflow field dependency detection
+    // Get workflows and check if field is used in XAML
+    try {
+      const workflows = await this.dependencyClient.getWorkflowsForEntity(entityLogicalName);
+      for (const workflow of workflows) {
+        const workflowDetails = await this.dependencyClient.getWorkflowDetails(workflow.workflowId);
+        if (workflowDetails && workflowDetails.xaml) {
+          const isFieldUsed = this.dependencyClient.isFieldUsedInWorkflow(
+            fieldLogicalName,
+            workflowDetails.xaml
+          );
+          
+          if (isFieldUsed) {
+            const workflowNode: DependencyNode = {
+              id: `workflow:${workflow.workflowId}`,
+              type: 'workflow',
+              name: workflow.name,
+              entityName: entityLogicalName,
+              dependencies: [fieldNode.id],
+              dependedOnBy: [],
+              metadata: {
+                componentId: workflow.workflowId,
+                componentType: 'workflow',
+                riskLevel: 'high',
+                description: `Uses field ${fieldLogicalName} in workflow logic`,
+              },
+            };
+            nodes.set(workflowNode.id, workflowNode);
+            fieldNode.dependedOnBy.push(workflowNode.id);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to get workflows for ${entityLogicalName}:`, error);
+    }
   }
 
   /**
@@ -376,6 +433,8 @@ export class GraphBuilder {
         return '#2ecc71';
       case 'view':
         return '#34495e';
+      case 'report':
+        return '#e67e22';
       default:
         return '#95a5a6';
     }
@@ -390,9 +449,15 @@ export class GraphBuilder {
     const workflows = graph.getNodesByType('workflow');
     const forms = graph.getNodesByType('form');
     const views = graph.getNodesByType('view');
+    const reports = graph.getNodesByType('report');
     const highRisk = graph.getHighRiskNodes();
     
     const rootNode = graph.getNode(graph.rootId);
+    
+    // Calculate direct vs indirect dependencies
+    const directDeps = rootNode?.dependedOnBy.length || 0;
+    const totalDeps = allNodes.length - 1; // Exclude root
+    const indirectDeps = Math.max(0, totalDeps - directDeps);
     
     return {
       target: {
@@ -401,9 +466,9 @@ export class GraphBuilder {
         entityName: rootNode?.entityName,
       },
       summary: {
-        totalDependencies: allNodes.length - 1, // Exclude root
-        directDependencies: rootNode?.dependedOnBy.length || 0,
-        indirectDependencies: allNodes.length - 1 - (rootNode?.dependedOnBy.length || 0),
+        totalDependencies: totalDeps,
+        directDependencies: directDeps,
+        indirectDependencies: indirectDeps,
         highRiskCount: highRisk.length,
         mediumRiskCount: allNodes.filter(n => n.metadata.riskLevel === 'medium').length,
         lowRiskCount: allNodes.filter(n => n.metadata.riskLevel === 'low').length,
@@ -413,7 +478,7 @@ export class GraphBuilder {
         workflows,
         forms,
         views,
-        reports: [],
+        reports,
         relationships: [],
       },
       recommendations: this.generateRecommendations(graph),
@@ -443,9 +508,15 @@ export class GraphBuilder {
       recommendations.push(`⚡ ${workflows.length} workflow(s) use this. Check workflow conditions and steps.`);
     }
     
+    const reports = graph.getNodesByType('report');
+    if (reports.length > 0) {
+      recommendations.push(`📊 ${reports.length} report(s) depend on this. Verify report data sources.`);
+    }
+    
     if (graph.rootType === 'attribute') {
       recommendations.push('📋 Check all forms and views that reference this field.');
       recommendations.push('🔍 Review any JavaScript web resources that may use this field.');
+      recommendations.push('⚙️ Review workflows that may use this field in conditions or actions.');
     }
     
     recommendations.push('✅ Consider creating a solution backup before making changes.');

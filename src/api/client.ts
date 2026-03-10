@@ -1,5 +1,9 @@
 import { AuthManager } from '../auth/manager';
 import { EntityMetadata, AttributeMetadata } from '../types';
+import { retryWithBackoff } from './retry-handler';
+import { validateEntityLogicalName, validateAttributeName } from '../odata/query-validator';
+import { withTimeout, DEFAULT_TIMEOUT } from './timeout-wrapper';
+import { getApiBaseUrl } from '../config/api-config';
 
 export class DataverseClient {
   private orgUrl: string;
@@ -28,28 +32,39 @@ export class DataverseClient {
 
   protected async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const headers = await this.getHeaders();
-    const url = `${this.orgUrl}/api/data/v9.2/${endpoint}`;
+    const baseUrl = getApiBaseUrl(this.orgUrl);
+    const url = `${baseUrl}/${endpoint}`;
 
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...headers,
-        ...options.headers,
-      },
-    });
+    return retryWithBackoff(async () => {
+      return withTimeout(
+        (async () => {
+          const response = await fetch(url, {
+            ...options,
+            headers: {
+              ...headers,
+              ...options.headers,
+            },
+          });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Dataverse API error (${response.status}): ${errorText}`);
-    }
+          if (!response.ok) {
+            const errorText = await response.text();
+            const error = new Error(`Dataverse API error (${response.status}): ${errorText}`) as any;
+            error.status = response.status;
+            throw error;
+          }
 
-    // Handle empty responses
-    const text = await response.text();
-    if (!text) {
-      return {} as T;
-    }
+          // Handle empty responses
+          const text = await response.text();
+          if (!text) {
+            return {} as T;
+          }
 
-    return JSON.parse(text);
+          return JSON.parse(text);
+        })(),
+        DEFAULT_TIMEOUT,
+        `GET ${endpoint}`
+      );
+    }, { maxRetries: 3, baseDelay: 1000, maxDelay: 30000 });
   }
 
   async testConnection(): Promise<boolean> {
@@ -97,6 +112,7 @@ export class DataverseClient {
   }
 
   async getEntityDefinition(logicalName: string): Promise<EntityMetadata> {
+    validateEntityLogicalName(logicalName);
     return this.request(`EntityDefinitions(LogicalName='${logicalName}')`);
   }
 
@@ -104,6 +120,7 @@ export class DataverseClient {
    * Get entity attributes with optional delta sync
    */
   async getEntityAttributes(logicalName: string, sinceTimestamp?: string): Promise<AttributeMetadata[]> {
+    validateEntityLogicalName(logicalName);
     let endpoint = `EntityDefinitions(LogicalName='${logicalName}')/Attributes?$select=LogicalName,SchemaName,DisplayName,Description,AttributeType,AttributeTypeName,IsPrimaryId,IsPrimaryName,RequiredLevel,IsValidForCreate,IsValidForUpdate,IsValidForRead,IsCustomAttribute,ModifiedOn`;
     
     if (sinceTimestamp) {

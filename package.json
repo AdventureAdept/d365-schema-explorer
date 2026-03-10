@@ -12,7 +12,8 @@
     "start": "node dist/cli.js",
     "watch": "tsc --watch",
     "clean": "rm -rf dist",
-    "lint": "eslint src/**/*.ts"
+    "lint": "eslint src/**/*.ts",
+    "test": "vitest run"
   },
   "keywords": [
     "d365",
@@ -30,14 +31,16 @@
     "conf": "^10.2.0",
     "dotenv": "^16.4.1",
     "inquirer": "^8.2.6",
-    "ora": "^5.4.1"
+    "keytar": "^7.9.0",
+    "ora": "^5.4.1",
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
     "@types/inquirer": "^8.2.10",
-    "@types/node": "^20.11.16",
+    "@types/node": "^20.19.37",
     "pac-cli": "^1.0.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "vitest": "^1.6.0"
   },
   "engines": {
     "node": ">=18.0.0"
