@@ -345,32 +345,64 @@ export class GraphBuilder {
   /**
    * Generate Mermaid diagram from graph
    */
+  private sanitizeMermaidId(id: string): string {
+    // Mermaid node IDs cannot contain colons, hyphens, dots, or spaces
+    return id.replace(/[:\-.\s]/g, '_');
+  }
+
   exportToMermaid(graph: DependencyGraph, options: Partial<GraphExportOptions> = {}): string {
-    const direction = options.direction || 'TB';
+    const direction = options.direction || 'LR';
+    const SUMMARY_THRESHOLD = 5; // Use summary nodes when a type has more than this many items
+
     const lines: string[] = [`graph ${direction}`];
-    
-    // Add nodes with styling
-    for (const node of graph.getAllNodes()) {
-      const style = this.getMermaidStyle(node);
-      const label = node.displayName || node.name;
-      lines.push(`    ${node.id}["${label}"]${style}`);
-    }
-    
-    // Add relationships
-    for (const node of graph.getAllNodes()) {
-      for (const depId of node.dependedOnBy) {
-        lines.push(`    ${node.id} --> ${depId}`);
+
+    const rootNode = graph.getNode(graph.rootId);
+    if (!rootNode) return lines.join('\n');
+
+    const rootSafeId = this.sanitizeMermaidId(rootNode.id);
+    const rootLabel = (rootNode.displayName || rootNode.name).replace(/["<>]/g, "'");
+    lines.push(`    ${rootSafeId}["${rootLabel}"]:::${rootNode.type}`);
+
+    const typeConfig: { type: DependencyNode['type']; icon: string; style: string }[] = [
+      { type: 'plugin',   icon: '🔌', style: 'plugin' },
+      { type: 'workflow', icon: '⚡', style: 'workflow' },
+      { type: 'form',     icon: '📄', style: 'form' },
+      { type: 'view',     icon: '👁', style: 'view' },
+      { type: 'report',   icon: '📊', style: 'report' },
+    ];
+
+    for (const { type, icon, style } of typeConfig) {
+      const nodes = graph.getNodesByType(type);
+      if (nodes.length === 0) continue;
+
+      if (nodes.length > SUMMARY_THRESHOLD) {
+        // Summary node: show count only
+        const summaryId = `summary_${type}`;
+        const highRisk = nodes.filter(n => n.metadata.riskLevel === 'high').length;
+        const riskLabel = highRisk > 0 ? ` ⚠️${highRisk} high risk` : '';
+        lines.push(`    ${summaryId}["${icon} ${nodes.length} ${type}s${riskLabel}"]:::${style}`);
+        lines.push(`    ${rootSafeId} --> ${summaryId}`);
+      } else {
+        // Show individual nodes
+        for (const node of nodes) {
+          const rawLabel = node.displayName || node.name || '';
+          const label = `${icon} ${(rawLabel.trim() || 'unnamed').replace(/["<>]/g, "'")}`;
+          const safeId = this.sanitizeMermaidId(node.id);
+          lines.push(`    ${safeId}["${label}"]:::${style}`);
+          lines.push(`    ${rootSafeId} --> ${safeId}`);
+        }
       }
     }
-    
-    // Add class definitions for styling
+
+    // Class definitions
     lines.push('    classDef entity fill:#e94560,stroke:#333,stroke-width:2px,color:#fff');
     lines.push('    classDef attribute fill:#4ea8de,stroke:#333,stroke-width:2px,color:#fff');
     lines.push('    classDef plugin fill:#f4d03f,stroke:#333,stroke-width:1px');
     lines.push('    classDef workflow fill:#9b59b6,stroke:#333,stroke-width:1px,color:#fff');
     lines.push('    classDef form fill:#2ecc71,stroke:#333,stroke-width:1px');
     lines.push('    classDef view fill:#34495e,stroke:#333,stroke-width:1px,color:#fff');
-    
+    lines.push('    classDef report fill:#e67e22,stroke:#333,stroke-width:1px,color:#fff');
+
     return lines.join('\n');
   }
 

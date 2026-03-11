@@ -2,7 +2,15 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { escapeHtml } from '../../src/webview/sanitize';
+function escapeHtml(unsafe: string): string {
+    if (!unsafe) return '';
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
 // Cache data interfaces matching CLI JSON structure
 interface EntityMetadata {
@@ -165,7 +173,7 @@ export class EntityDetailsPanel {
             return this._getErrorHtml('No active client');
         }
 
-        const cacheFilePath = path.join(configDir, 'clients', `${clientName}-cache.json`);
+        const cacheFilePath = path.join(configDir, `${clientName}-cache.json`);
         if (!fs.existsSync(cacheFilePath)) {
             return this._getErrorHtml('No schema cache found');
         }

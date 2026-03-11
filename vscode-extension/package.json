@@ -68,6 +68,11 @@
       {
         "command": "d365SchemaExplorer.viewRelationshipDetails",
         "title": "View Relationship Details"
+      },
+      {
+        "command": "d365SchemaExplorer.showDependencyGraph",
+        "title": "Show Dependency Graph",
+        "icon": "$(type-hierarchy)"
       }
     ],
     "views": {
@@ -104,8 +109,19 @@
           "group": "inline"
         },
         {
+          "command": "d365SchemaExplorer.exportEntity",
+          "when": "view == d365SchemaExplorer && viewItem == entity",
+          "group": "d365@1"
+        },
+        {
+          "command": "d365SchemaExplorer.showDependencyGraph",
+          "when": "view == d365SchemaExplorer && viewItem == entity",
+          "group": "d365@2"
+        },
+        {
           "command": "d365SchemaExplorer.viewEntityDetails",
-          "when": "view == d365SchemaExplorer && viewItem == entity"
+          "when": "view == d365SchemaExplorer && viewItem == entity",
+          "group": "d365@3"
         },
         {
           "command": "d365SchemaExplorer.viewRelationshipDetails",
@@ -130,6 +146,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show custom entities in the tree view"
+        },
+        "d365SchemaExplorer.cliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the d365ai CLI (dist/cli.js). Leave empty to use default ~/Downloads/d365-schema-explorer/dist/cli.js"
         }
       }
     }

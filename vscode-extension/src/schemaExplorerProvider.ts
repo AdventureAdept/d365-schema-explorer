@@ -290,7 +290,7 @@ export class SchemaExplorerProvider implements vscode.TreeDataProvider<SchemaIte
     }
 
     async connectToClient(clientName: string): Promise<void> {
-        const cacheFile = path.join(os.homedir(), '.d365ai', 'clients', `${clientName}-cache.json`);
+        const cacheFile = path.join(os.homedir(), '.d365ai', `${clientName}-cache.json`);
 
         if (!fs.existsSync(cacheFile)) {
             const action = await vscode.window.showWarningMessage(
@@ -419,9 +419,10 @@ export class SchemaExplorerProvider implements vscode.TreeDataProvider<SchemaIte
 
         if (!format) return;
 
+        const defaultPath = path.join(os.homedir(), `${entityName}.${format.toLowerCase()}`);
         const uri = await vscode.window.showSaveDialog({
-            defaultUri: vscode.Uri.file(`${entityName}.${format.toLowerCase()}`),
-            filters: format === 'JSON' 
+            defaultUri: vscode.Uri.file(defaultPath),
+            filters: format === 'JSON'
                 ? { 'JSON': ['json'] }
                 : { 'Markdown': ['md'] }
         });

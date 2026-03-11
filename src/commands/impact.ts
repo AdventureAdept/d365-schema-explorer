@@ -180,7 +180,7 @@ export async function graphCommand(
   const graphBuilder = new GraphBuilder(dependencyClient, cache);
 
   const format = (options.format || 'mermaid') as 'mermaid' | 'dot' | 'json';
-  const direction = (options.direction || 'TB') as 'TB' | 'BT' | 'LR' | 'RL';
+  const direction = (options.direction || 'LR') as 'TB' | 'BT' | 'LR' | 'RL';
 
   const spinner = ora('Building dependency graph...').start();
 
