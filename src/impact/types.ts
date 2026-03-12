@@ -2,7 +2,7 @@
 
 export interface DependencyNode {
   id: string;
-  type: 'entity' | 'attribute' | 'plugin' | 'workflow' | 'form' | 'view' | 'report' | 'relationship';
+  type: 'entity' | 'attribute' | 'plugin' | 'workflow' | 'form' | 'view' | 'report' | 'relationship' | 'webresource';
   name: string;
   displayName?: string;
   entityName?: string;
@@ -15,6 +15,10 @@ export interface DependencyNode {
     isManaged?: boolean;
     description?: string;
     riskLevel?: 'high' | 'medium' | 'low';
+    codeSnippet?: string;
+    lineNumber?: number;
+    context?: string;
+    functionDescription?: string;
   };
 }
 
@@ -53,6 +57,7 @@ export interface ImpactReport {
     views: DependencyNode[];
     reports: DependencyNode[];
     relationships: DependencyNode[];
+    webResources: DependencyNode[];
   };
   recommendations: string[];
   generatedAt: string;

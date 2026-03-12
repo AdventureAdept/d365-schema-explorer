@@ -9,40 +9,66 @@ import { DependencyClient } from '../api/dependency-client';
 import { GraphBuilder } from '../impact/graph-builder';
 import { GraphExportOptions } from '../impact/types';
 
-export async function analyzeCommand(
-  target: string,
-  options: { entity?: string; field?: string }
-): Promise<void> {
+/**
+ * Validates entity/field name format
+ */
+function validateEntityName(name: string): boolean {
+  // Allow alphanumeric and underscore, must start with letter
+  return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(name);
+}
+
+/**
+ * Shared setup function for impact commands
+ */
+async function setupImpactCommand() {
   const config = new ConfigManager();
   const auth = new AuthManager(config);
 
   const activeClient = config.getActiveClient();
   if (!activeClient) {
-    console.log(chalk.yellow('No active client. Run "d365ai env connect" first.'));
-    return;
+    throw new Error('No active client. Run "d365ai env connect" first.');
   }
 
   const clientConfig = config.getActiveClientConfig();
   if (!clientConfig) {
-    console.log(chalk.red('Active client configuration not found.'));
-    return;
+    throw new Error('Active client configuration not found.');
   }
 
   const isAuthenticated = await auth.isAuthenticated(activeClient);
   if (!isAuthenticated) {
-    console.log(chalk.yellow('Not authenticated. Run "d365ai env connect" first.'));
-    return;
+    throw new Error('Not authenticated. Run "d365ai env connect" first.');
   }
 
   const cache = new CacheManager(config.getConfigDir(), activeClient);
   cache.open();
 
   const dependencyClient = new DependencyClient(clientConfig.orgUrl, auth, activeClient);
-  const graphBuilder = new GraphBuilder(dependencyClient, cache);
+  const graphBuilder = new GraphBuilder(dependencyClient, cache, clientConfig.orgUrl, auth, activeClient);
 
-  const spinner = ora('Building dependency graph...').start();
+  return { config, auth, activeClient, clientConfig, cache, dependencyClient, graphBuilder };
+}
 
+export async function analyzeCommand(
+  target: string,
+  options: { entity?: string; field?: string }
+): Promise<void> {
+  // Validate target
+  if (!target || typeof target !== 'string') {
+    console.log(chalk.red('Target is required'));
+    return;
+  }
+  
+  let graphBuilder: GraphBuilder;
+  let cache: CacheManager | undefined;
+  let spinner: any;
+  
   try {
+    const setup = await setupImpactCommand();
+    graphBuilder = setup.graphBuilder;
+    cache = setup.cache;
+
+    spinner = ora('Building dependency graph...').start();
+
     let graph;
     
     if (options.field && options.entity) {
@@ -128,17 +154,33 @@ export async function analyzeCommand(
       console.log();
     }
 
+    if (report.components.webResources.length > 0) {
+      console.log(chalk.cyan(`Web Resources (${report.components.webResources.length}):`));
+      report.components.webResources.forEach(wr => {
+        console.log(`  ${chalk.cyan('📜')} ${wr.name}`);
+        if (wr.metadata.description) {
+          console.log(`     ${chalk.gray(wr.metadata.description)}`);
+        }
+        if (wr.metadata.lineNumber) {
+          console.log(`     ${chalk.gray(`Line ${wr.metadata.lineNumber}: ${wr.metadata.codeSnippet?.substring(0, 60)}...`)}`);
+        }
+      });
+      console.log();
+    }
+
     console.log(chalk.cyan('Recommendations:'));
     report.recommendations.forEach(rec => {
       console.log(`  ${rec}`);
     });
 
   } catch (error: any) {
-    spinner.fail(chalk.red('Failed to analyze dependencies'));
+    if (spinner) {
+      spinner.fail(chalk.red('Failed to analyze dependencies'));
+    }
     console.error(chalk.red(error.message));
-    process.exit(1);
+    throw error;
   } finally {
-    cache.close();
+    cache?.close();
   }
 }
 
@@ -177,7 +219,7 @@ export async function graphCommand(
   cache.open();
 
   const dependencyClient = new DependencyClient(clientConfig.orgUrl, auth, activeClient);
-  const graphBuilder = new GraphBuilder(dependencyClient, cache);
+  const graphBuilder = new GraphBuilder(dependencyClient, cache, clientConfig.orgUrl, auth, activeClient);
 
   const format = (options.format || 'mermaid') as 'mermaid' | 'dot' | 'json';
   const direction = (options.direction || 'LR') as 'TB' | 'BT' | 'LR' | 'RL';
@@ -227,7 +269,7 @@ export async function graphCommand(
   } catch (error: any) {
     spinner.fail(chalk.red('Failed to generate graph'));
     console.error(chalk.red(error.message));
-    process.exit(1);
+    throw error;
   } finally {
     cache.close();
   }
@@ -267,7 +309,7 @@ export async function reportCommand(
   cache.open();
 
   const dependencyClient = new DependencyClient(clientConfig.orgUrl, auth, activeClient);
-  const graphBuilder = new GraphBuilder(dependencyClient, cache);
+  const graphBuilder = new GraphBuilder(dependencyClient, cache, clientConfig.orgUrl, auth, activeClient);
 
   const spinner = ora('Generating impact report...').start();
 
@@ -313,7 +355,7 @@ export async function reportCommand(
   } catch (error: any) {
     spinner.fail(chalk.red('Failed to generate report'));
     console.error(chalk.red(error.message));
-    process.exit(1);
+    throw error;
   } finally {
     cache.close();
   }
@@ -373,6 +415,20 @@ function formatReportAsMarkdown(report: any): string {
     md += `### Views (${report.components.views.length})\n\n`;
     report.components.views.forEach((v: any) => {
       md += `- **${v.name}**\n`;
+    });
+    md += `\n`;
+  }
+
+  if (report.components.webResources.length > 0) {
+    md += `### Web Resources (${report.components.webResources.length})\n\n`;
+    report.components.webResources.forEach((wr: any) => {
+      md += `- **${wr.name}**\n`;
+      if (wr.metadata.description) {
+        md += `  - ${wr.metadata.description}\n`;
+      }
+      if (wr.metadata.lineNumber) {
+        md += `  - Line ${wr.metadata.lineNumber}: \`${wr.metadata.codeSnippet?.substring(0, 80)}...\`\n`;
+      }
     });
     md += `\n`;
   }

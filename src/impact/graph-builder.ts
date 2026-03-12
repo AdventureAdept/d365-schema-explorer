@@ -1,14 +1,34 @@
 import { DependencyNode, DependencyGraph, GraphExportOptions, ImpactReport } from './types';
 import { DependencyClient } from '../api/dependency-client';
+import { WebResourceClient, WebResourceUsage } from '../api/webresource-client';
+import { PluginCodeAnalyzer, PluginCodeUsage } from '../api/plugin-code-analyzer';
 import { CacheManager } from '../cache/manager';
+import { AuthManager } from '../auth/manager';
 
 export class GraphBuilder {
   private dependencyClient: DependencyClient;
+  private webResourceClient: WebResourceClient;
+  private pluginCodeAnalyzer: PluginCodeAnalyzer;
   private cacheManager: CacheManager;
+  private orgUrl: string;
+  private authManager: AuthManager;
+  private clientName: string;
 
-  constructor(dependencyClient: DependencyClient, cacheManager: CacheManager) {
+  constructor(
+    dependencyClient: DependencyClient, 
+    cacheManager: CacheManager, 
+    orgUrl: string,
+    authManager: AuthManager,
+    clientName: string,
+    pluginSourcePath?: string
+  ) {
     this.dependencyClient = dependencyClient;
     this.cacheManager = cacheManager;
+    this.orgUrl = orgUrl;
+    this.authManager = authManager;
+    this.clientName = clientName;
+    this.webResourceClient = new WebResourceClient(orgUrl, authManager, clientName);
+    this.pluginCodeAnalyzer = new PluginCodeAnalyzer(pluginSourcePath);
   }
 
   /**
@@ -241,6 +261,64 @@ export class GraphBuilder {
     } catch (error) {
       console.warn(`Failed to get reports for ${entityLogicalName}:`, error);
     }
+
+    // Get web resources (JavaScript files that reference this entity)
+    try {
+      const webResourceUsages = await this.webResourceClient.searchWebResources(entityLogicalName);
+      for (const usage of webResourceUsages) {
+        for (const occurrence of usage.occurrences) {
+          const webResourceNode: DependencyNode = {
+            id: `webresource:${usage.webResourceName}:${occurrence.lineNumber}`,
+            type: 'webresource',
+            name: usage.webResourceName,
+            entityName: entityLogicalName,
+            dependencies: [entityNode.id],
+            dependedOnBy: [],
+            metadata: {
+              componentType: 'webresource',
+              riskLevel: 'medium',
+              description: occurrence.functionDescription || `Web Resource (${usage.webResourceType})`,
+              codeSnippet: occurrence.codeSnippet,
+              lineNumber: occurrence.lineNumber,
+              context: occurrence.context,
+            },
+          };
+          nodes.set(webResourceNode.id, webResourceNode);
+          entityNode.dependedOnBy.push(webResourceNode.id);
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to get web resources for ${entityLogicalName}:`, error);
+    }
+
+    // Get plugin code references (C# files from Azure DevOps)
+    try {
+      const pluginUsages = await this.pluginCodeAnalyzer.searchPluginCode(entityLogicalName);
+      for (const usage of pluginUsages) {
+        for (const occurrence of usage.occurrences) {
+          const pluginCodeNode: DependencyNode = {
+            id: `plugincode:${usage.pluginName}:${occurrence.lineNumber}`,
+            type: 'plugin',
+            name: `${usage.pluginName} (Code)`,
+            entityName: entityLogicalName,
+            dependencies: [entityNode.id],
+            dependedOnBy: [],
+            metadata: {
+              componentType: 'plugin',
+              riskLevel: 'high',
+              description: occurrence.functionDescription || `Plugin code reference`,
+              codeSnippet: occurrence.codeSnippet,
+              lineNumber: occurrence.lineNumber,
+              context: occurrence.context,
+            },
+          };
+          nodes.set(pluginCodeNode.id, pluginCodeNode);
+          entityNode.dependedOnBy.push(pluginCodeNode.id);
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to analyze plugin code for ${entityLogicalName}:`, error);
+    }
   }
 
   /**
@@ -340,6 +418,39 @@ export class GraphBuilder {
     } catch (error) {
       console.warn(`Failed to get workflows for ${entityLogicalName}:`, error);
     }
+
+    // Get web resources and check if field is referenced in JavaScript
+    try {
+      const webResourceUsages = await this.webResourceClient.searchWebResources(
+        fieldLogicalName,
+        entityLogicalName,
+        fieldLogicalName
+      );
+      for (const usage of webResourceUsages) {
+        for (const occurrence of usage.occurrences) {
+          const webResourceNode: DependencyNode = {
+            id: `webresource:${usage.webResourceName}:${occurrence.lineNumber}`,
+            type: 'webresource',
+            name: usage.webResourceName,
+            entityName: entityLogicalName,
+            dependencies: [fieldNode.id],
+            dependedOnBy: [],
+            metadata: {
+              componentType: 'webresource',
+              riskLevel: 'high',
+              description: occurrence.functionDescription || `Uses field ${fieldLogicalName} (${usage.webResourceType})`,
+              codeSnippet: occurrence.codeSnippet,
+              lineNumber: occurrence.lineNumber,
+              context: occurrence.context,
+            },
+          };
+          nodes.set(webResourceNode.id, webResourceNode);
+          fieldNode.dependedOnBy.push(webResourceNode.id);
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to get web resources for field ${fieldLogicalName}:`, error);
+    }
   }
 
   /**
@@ -369,6 +480,7 @@ export class GraphBuilder {
       { type: 'form',     icon: '📄', style: 'form' },
       { type: 'view',     icon: '👁', style: 'view' },
       { type: 'report',   icon: '📊', style: 'report' },
+      { type: 'webresource', icon: '📜', style: 'webresource' },
     ];
 
     for (const { type, icon, style } of typeConfig) {
@@ -401,6 +513,7 @@ export class GraphBuilder {
     lines.push('    classDef workflow fill:#9b59b6,stroke:#333,stroke-width:1px,color:#fff');
     lines.push('    classDef form fill:#2ecc71,stroke:#333,stroke-width:1px');
     lines.push('    classDef view fill:#34495e,stroke:#333,stroke-width:1px,color:#fff');
+    lines.push('    classDef webresource fill:#3498db,stroke:#333,stroke-width:1px,color:#fff');
     lines.push('    classDef report fill:#e67e22,stroke:#333,stroke-width:1px,color:#fff');
 
     return lines.join('\n');
@@ -420,6 +533,8 @@ export class GraphBuilder {
         return ':::form';
       case 'view':
         return ':::view';
+      case 'webresource':
+        return ':::webresource';
       default:
         return '';
     }
@@ -467,6 +582,8 @@ export class GraphBuilder {
         return '#34495e';
       case 'report':
         return '#e67e22';
+      case 'webresource':
+        return '#3498db';
       default:
         return '#95a5a6';
     }
@@ -482,6 +599,7 @@ export class GraphBuilder {
     const forms = graph.getNodesByType('form');
     const views = graph.getNodesByType('view');
     const reports = graph.getNodesByType('report');
+    const webResources = graph.getNodesByType('webresource');
     const highRisk = graph.getHighRiskNodes();
     
     const rootNode = graph.getNode(graph.rootId);
@@ -512,6 +630,7 @@ export class GraphBuilder {
         views,
         reports,
         relationships: [],
+        webResources,
       },
       recommendations: this.generateRecommendations(graph),
       generatedAt: new Date().toISOString(),
