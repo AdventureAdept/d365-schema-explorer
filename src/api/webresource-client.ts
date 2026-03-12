@@ -27,24 +27,42 @@ export class WebResourceClient extends DataverseClient {
   }
 
   /**
-   * Get all JavaScript web resources
+   * Get all JavaScript web resources (paginated for performance)
    */
-  async getJavaScriptWebResources(): Promise<WebResource[]> {
-    const response = await this.request<{
-      value: {
-        webresourceid: string;
-        name: string;
-        displayname: string;
-        webresourcetype: number;
-        content: string;
-        description?: string;
-      }[];
-    }>(`webresourceset?$filter=webresourcetype eq 3&$select=webresourceid,name,displayname,webresourcetype,content,description`);
+  async getJavaScriptWebResources(maxResources: number = 500): Promise<WebResource[]> {
+    const webResources: WebResource[] = [];
+    let fetchUrl = `webresourceset?$filter=webresourcetype eq 3&$select=webresourceid,name,displayname,webresourcetype,content,description&$top=100`;
+    
+    // Fetch in batches to avoid timeout
+    while (fetchUrl && webResources.length < maxResources) {
+      const response = await this.request<{
+        value: {
+          webresourceid: string;
+          name: string;
+          displayname: string;
+          webresourcetype: number;
+          content: string;
+          description?: string;
+        }[];
+        '@odata.nextLink'?: string;
+      }>(fetchUrl);
 
-    return response.value.map(wr => ({
-      ...wr,
-      content: Buffer.from(wr.content, 'base64').toString('utf-8')
-    }));
+      const decoded = response.value.map(wr => ({
+        ...wr,
+        content: Buffer.from(wr.content, 'base64').toString('utf-8')
+      }));
+      
+      webResources.push(...decoded);
+      
+      // Stop if we have enough
+      if (webResources.length >= maxResources) {
+        break;
+      }
+      
+      fetchUrl = response['@odata.nextLink'] ? response['@odata.nextLink'].replace(/^.*\/api\/data\/v[\d.]+\//, '') : '';
+    }
+
+    return webResources.slice(0, maxResources);
   }
 
   /**
@@ -69,29 +87,38 @@ export class WebResourceClient extends DataverseClient {
     const sanitizedEntityName = entityName ? this.sanitizeSearchTerm(entityName) : undefined;
     const sanitizedFieldName = fieldName ? this.sanitizeSearchTerm(fieldName) : undefined;
     
-    const webResources = await this.getJavaScriptWebResources();
+    // Fetch web resources with limit (default 500 for performance)
+    const webResources = await this.getJavaScriptWebResources(500);
+    
+    // Process in parallel with concurrency limit
+    const concurrencyLimit = 10;
     const usages: WebResourceUsage[] = [];
     
-    // Limit processing to prevent DoS
-    const maxResources = 1000;
-    const resourcesToProcess = webResources.slice(0, maxResources);
-
-    for (const wr of resourcesToProcess) {
-      // Limit content size
-      const maxContentSize = 1024 * 1024; // 1MB
-      const content = wr.content.length > maxContentSize 
-        ? wr.content.substring(0, maxContentSize) 
-        : wr.content;
+    for (let i = 0; i < webResources.length; i += concurrencyLimit) {
+      const batch = webResources.slice(i, i + concurrencyLimit);
       
-      const occurrences = this.findOccurrences(content, sanitizedSearchTerm, sanitizedEntityName, sanitizedFieldName);
+      const batchResults = await Promise.all(
+        batch.map(async (wr) => {
+          // Limit content size
+          const maxContentSize = 500 * 1024; // 500KB limit
+          const content = wr.content.length > maxContentSize 
+            ? wr.content.substring(0, maxContentSize) 
+            : wr.content;
+          
+          const occurrences = this.findOccurrences(content, sanitizedSearchTerm, sanitizedEntityName, sanitizedFieldName);
+          
+          if (occurrences.length > 0) {
+            return {
+              webResourceName: wr.name,
+              webResourceType: this.getWebResourceTypeName(wr.webresourcetype),
+              occurrences
+            };
+          }
+          return null;
+        })
+      );
       
-      if (occurrences.length > 0) {
-        usages.push({
-          webResourceName: wr.name,
-          webResourceType: this.getWebResourceTypeName(wr.webresourcetype),
-          occurrences
-        });
-      }
+      usages.push(...batchResults.filter((r): r is WebResourceUsage => r !== null));
     }
 
     return usages;

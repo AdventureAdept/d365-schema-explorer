@@ -267,63 +267,83 @@ export class GraphBuilder {
       console.warn(`Failed to get reports for ${entityLogicalName}:`, error);
     }
 
-    // Get web resources (JavaScript files that reference this entity)
-    try {
-      const webResourceUsages = await this.webResourceClient.searchWebResources(entityLogicalName);
-      for (const usage of webResourceUsages) {
-        for (const occurrence of usage.occurrences) {
-          const webResourceNode: DependencyNode = {
-            id: `webresource:${usage.webResourceName}:${occurrence.lineNumber}`,
-            type: 'webresource',
-            name: usage.webResourceName,
-            entityName: entityLogicalName,
-            dependencies: [entityNode.id],
-            dependedOnBy: [],
-            metadata: {
-              componentType: 'webresource',
-              riskLevel: 'medium',
-              description: occurrence.functionDescription || `Web Resource (${usage.webResourceType})`,
-              codeSnippet: occurrence.codeSnippet,
-              lineNumber: occurrence.lineNumber,
-              context: occurrence.context,
-            },
-          };
-          nodes.set(webResourceNode.id, webResourceNode);
-          entityNode.dependedOnBy.push(webResourceNode.id);
-        }
-      }
-    } catch (error) {
+    // Run web resource and plugin analysis in parallel with timeout
+    const analysisTimeout = 25000; // 25 seconds timeout for each
+    
+    const webResourcePromise = Promise.race([
+      this.webResourceClient.searchWebResources(entityLogicalName),
+      new Promise<[]>((_, reject) => 
+        setTimeout(() => reject(new Error('Web resource analysis timeout')), analysisTimeout)
+      )
+    ]).catch(error => {
       console.warn(`Failed to get web resources for ${entityLogicalName}:`, error);
+      return [];
+    });
+
+    const pluginCodePromise = this.pluginCodeAnalyzer 
+      ? Promise.race([
+          this.pluginCodeAnalyzer.searchPluginCode(entityLogicalName),
+          new Promise<[]>((_, reject) => 
+            setTimeout(() => reject(new Error('Plugin code analysis timeout')), analysisTimeout)
+          )
+        ]).catch(error => {
+          console.warn(`Failed to analyze plugin code for ${entityLogicalName}:`, error);
+          return [];
+        })
+      : Promise.resolve([]);
+
+    // Wait for both in parallel
+    const [webResourceUsages, pluginUsages] = await Promise.all([
+      webResourcePromise,
+      pluginCodePromise
+    ]);
+
+    // Process web resources
+    for (const usage of webResourceUsages) {
+      for (const occurrence of usage.occurrences) {
+        const webResourceNode: DependencyNode = {
+          id: `webresource:${usage.webResourceName}:${occurrence.lineNumber}`,
+          type: 'webresource',
+          name: usage.webResourceName,
+          entityName: entityLogicalName,
+          dependencies: [entityNode.id],
+          dependedOnBy: [],
+          metadata: {
+            componentType: 'webresource',
+            riskLevel: 'medium',
+            description: occurrence.functionDescription || `Web Resource (${usage.webResourceType})`,
+            codeSnippet: occurrence.codeSnippet,
+            lineNumber: occurrence.lineNumber,
+            context: occurrence.context,
+          },
+        };
+        nodes.set(webResourceNode.id, webResourceNode);
+        entityNode.dependedOnBy.push(webResourceNode.id);
+      }
     }
 
-    // Get plugin code references (C# files from local source)
-    try {
-      if (!this.pluginCodeAnalyzer) throw new Error('Plugin source path not configured');
-      const pluginUsages = await this.pluginCodeAnalyzer.searchPluginCode(entityLogicalName);
-      for (const usage of pluginUsages) {
-        for (const occurrence of usage.occurrences) {
-          const pluginCodeNode: DependencyNode = {
-            id: `plugincode:${usage.pluginName}:${occurrence.lineNumber}`,
-            type: 'plugin',
-            name: `${usage.pluginName} (Code)`,
-            entityName: entityLogicalName,
-            dependencies: [entityNode.id],
-            dependedOnBy: [],
-            metadata: {
-              componentType: 'plugin',
-              riskLevel: 'high',
-              description: occurrence.functionDescription || `Plugin code reference`,
-              codeSnippet: occurrence.codeSnippet,
-              lineNumber: occurrence.lineNumber,
-              context: occurrence.context,
-            },
-          };
-          nodes.set(pluginCodeNode.id, pluginCodeNode);
-          entityNode.dependedOnBy.push(pluginCodeNode.id);
-        }
+    // Process plugin code
+    for (const usage of pluginUsages) {
+      for (const occurrence of usage.occurrences) {
+        const pluginCodeNode: DependencyNode = {
+          id: `plugincode:${usage.pluginName}:${occurrence.lineNumber}`,
+          type: 'plugin',
+          name: `${usage.pluginName} (Code)`,
+          entityName: entityLogicalName,
+          dependencies: [entityNode.id],
+          dependedOnBy: [],
+          metadata: {
+            componentType: 'plugin',
+            riskLevel: 'high',
+            description: occurrence.functionDescription || `Plugin code reference`,
+            codeSnippet: occurrence.codeSnippet,
+            lineNumber: occurrence.lineNumber,
+            context: occurrence.context,
+          },
+        };
+        nodes.set(pluginCodeNode.id, pluginCodeNode);
+        entityNode.dependedOnBy.push(pluginCodeNode.id);
       }
-    } catch (error) {
-      console.warn(`Failed to analyze plugin code for ${entityLogicalName}:`, error);
     }
   }
 

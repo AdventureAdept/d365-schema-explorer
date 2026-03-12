@@ -69,32 +69,43 @@ export class PluginCodeAnalyzer {
     // Limit number of files processed
     const filesToProcess = csFiles.slice(0, this.maxFiles);
     
-    for (const filePath of filesToProcess) {
-      try {
-        // Check file size before reading
-        const stats = await fs.promises.stat(filePath);
-        if (stats.size > this.maxFileSize) {
-          console.warn(`Skipping large file ${filePath}: ${stats.size} bytes exceeds limit`);
-          continue;
-        }
-        
-        const content = await fs.promises.readFile(filePath, 'utf-8');
-        const occurrences = this.findOccurrences(content, searchTerm, entityName, fieldName);
-        
-        if (occurrences.length > 0) {
-          // Extract plugin name from file path or content
-          const pluginName = this.extractPluginName(filePath, content);
-          
-          usages.push({
-            pluginName,
-            filePath: path.relative(this.pluginSourcePath, filePath),
-            occurrences
-          });
-        }
-      } catch (error) {
-        console.warn(`Failed to read file ${filePath}:`, error);
-        // Continue processing other files
-      }
+    // Process in parallel with concurrency limit
+    const concurrencyLimit = 20;
+    
+    for (let i = 0; i < filesToProcess.length; i += concurrencyLimit) {
+      const batch = filesToProcess.slice(i, i + concurrencyLimit);
+      
+      const batchResults = await Promise.all(
+        batch.map(async (filePath) => {
+          try {
+            // Check file size before reading
+            const stats = await fs.promises.stat(filePath);
+            if (stats.size > this.maxFileSize) {
+              console.warn(`Skipping large file ${filePath}: ${stats.size} bytes exceeds limit`);
+              return null;
+            }
+            
+            const content = await fs.promises.readFile(filePath, 'utf-8');
+            const occurrences = this.findOccurrences(content, searchTerm, entityName, fieldName);
+            
+            if (occurrences.length > 0) {
+              // Extract plugin name from file path or content
+              const pluginName = this.extractPluginName(filePath, content);
+              
+              return {
+                pluginName,
+                filePath: path.relative(this.pluginSourcePath, filePath),
+                occurrences
+              };
+            }
+          } catch (error) {
+            console.warn(`Failed to read file ${filePath}:`, error);
+          }
+          return null;
+        })
+      );
+      
+      usages.push(...batchResults.filter((r): r is PluginCodeUsage => r !== null));
     }
     
     return usages;
