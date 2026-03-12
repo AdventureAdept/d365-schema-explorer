@@ -32,6 +32,24 @@ D365 Schema Explorer helps Dynamics 365 developers:
 
 ---
 
+## 📑 Table of Contents
+
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [CLI Commands](#-cli-commands)
+- [Authentication](#-authentication)
+- [Delta Sync](#-delta-sync)
+- [VS Code Extension](#-vs-code-extension)
+- [Project Structure](#-project-structure)
+- [Testing](#-testing)
+- [Configuration](#-configuration)
+- [Documentation](#-documentation)
+- [Development](#-development)
+- [CI/CD Pipelines](#-cicd-pipelines)
+- [Use Cases](#-use-cases)
+
+---
+
 ## 📦 Installation
 
 ### Prerequisites
@@ -412,35 +430,6 @@ d365ai impact analyze tvs_city --format json
 # - Function descriptions from comments
 # - Code snippets for context
 ```
-
----
-
-## 📈 Roadmap
-
-### ✅ Product 1: Schema Explorer (MVP Complete)
-- CLI with env, schema, impact commands
-- VS Code extension with tree view + graph viewer
-- Security, stability, infrastructure, polish (Phases 1-4)
-
-### ✅ Product 2: Impact Analyzer (Bundled)
-- Dependency graph builder
-- Impact analysis and reports
-- Mermaid/DOT export
-
-### 📋 Product 3: Code Assistant (Future)
-- AI-powered plugin code generation
-- Code review with D365 best practices
-- Unit test generation (FakeXrmEasy)
-
-### 📋 Product 4: DevOps Bridge (Future)
-- PAC CLI integration
-- Azure DevOps pipeline triggers
-- Solution export/import automation
-
-### 📋 Product 5: Project Hub (Future)
-- Jira integration
-- Architecture recommendations
-- Auto-generated technical docs
 
 ---
 
