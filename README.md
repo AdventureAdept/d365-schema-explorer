@@ -44,6 +44,13 @@ D365 Schema Explorer helps Dynamics 365 developers:
 - ✅ **Configurable API Version** — `DATAVERSE_API_VERSION` env var
 - ✅ **Dependency Graph GUI** — Interactive Mermaid viewer in VS Code
 
+### 🔍 Enhanced Impact Analyzer (NEW)
+- ✅ **Web Resource Analysis** — Scan JavaScript web resources for entity/field usage
+- ✅ **Plugin Code Analysis** — Analyze C# plugin code from Azure DevOps
+- ✅ **Field-Level Analysis** — Find specific field usage across all components
+- ✅ **Code Snippets** — View actual code with line numbers and context
+- ✅ **Function Descriptions** — Extract JSDoc/XML comments for context
+
 ### 📚 Documentation (Phase 4)
 - ✅ **API Reference** — Complete CLI command documentation
 - ✅ **Troubleshooting Guide** — Common issues with solutions
@@ -138,13 +145,49 @@ d365ai schema export account --format markdown
 | `d365ai schema export [entity]` | Export schema to JSON or Markdown |
 | `d365ai schema list` | List all entities |
 
-### Impact Commands
+### Impact Commands (Enhanced)
 
 | Command | Description |
 |---------|-------------|
 | `d365ai impact analyze <target>` | Analyze dependencies for entity/field |
 | `d365ai impact graph <target>` | Show dependency graph (Mermaid format) |
 | `d365ai impact report <target>` | Generate impact assessment report |
+
+**Enhanced Impact Analysis Features:**
+
+| Feature | Description |
+|---------|-------------|
+| **Web Resource Scanning** | Finds JavaScript web resources referencing the entity/field |
+| **Plugin Code Analysis** | Scans C# plugin code from Azure DevOps repo |
+| **Field-Level Analysis** | Search specific field usage: `account.tvs_city` |
+| **Code Context** | Shows line numbers, code snippets, function descriptions |
+| **Multi-Source** | Combines D365 API, web resources, and plugin code |
+
+**Usage Examples:**
+
+```bash
+# Analyze entity (includes web resources and plugin code)
+d365ai impact analyze tvs_city
+
+# Analyze specific field
+d365ai impact analyze account.tvs_city
+# or
+d365ai impact analyze --entity account --field tvs_city
+
+# Generate dependency graph
+d365ai impact graph tvs_city --format mermaid
+
+# Export report
+d365ai impact report tvs_city --format json --output report.json
+```
+
+**Output includes:**
+- Registered plugins from D365
+- Plugin code references from Azure DevOps
+- Web resources (JavaScript) using the entity/field
+- Forms, views, workflows
+- Line numbers and code snippets
+- Function descriptions from comments |
 
 ---
 
@@ -332,6 +375,69 @@ npm run package
 | **CI** | Push/PR to main | Build + Test |
 | **Publish NPM** | Release published | `npm publish` |
 | **Publish VSCE** | Release published | VS Code Marketplace |
+
+---
+
+## 🎯 Use Cases
+
+### Schema Explorer
+
+| Use Case | How To |
+|----------|--------|
+| **Browse D365 Schema** | `d365ai schema list` or VS Code tree view |
+| **Find Entity Fields** | Search in VS Code or `d365ai schema search <term>` |
+| **Export Documentation** | `d365ai schema export <entity> --format markdown` |
+| **Sync Schema Changes** | `d365ai schema pull` (delta sync) |
+
+### Impact Analyzer
+
+| Use Case | How To | Output |
+|----------|--------|--------|
+| **Assess Change Impact** | `d365ai impact analyze <entity>` | Dependencies, risk levels |
+| **Find Field Usage** | `d365ai impact analyze <entity>.<field>` | Forms, views, plugins, JS |
+| **Visualize Dependencies** | `d365ai impact graph <entity>` | Mermaid diagram |
+| **Audit Plugin Code** | `d365ai impact analyze <entity>` | Azure DevOps C# references |
+| **Find Web Resource Usage** | `d365ai impact analyze <entity>` | JavaScript files using entity |
+| **Generate Reports** | `d365ai impact report <entity> --format json` | JSON/Markdown export |
+
+### Enhanced Impact Analysis (NEW)
+
+**Scenario 1: Rename Field Safely**
+```bash
+# Check what depends on account.tvs_city
+d365ai impact analyze account.tvs_city
+
+# Output shows:
+# - Forms using the field
+# - Views displaying the field  
+# - Plugins referencing the field
+# - Web resources (JS) using the field
+# - Plugin code from Azure DevOps
+```
+
+**Scenario 2: Delete Entity Assessment**
+```bash
+# Full impact analysis before deleting
+d365ai impact analyze tvs_city
+
+# Output shows:
+# - 36 plugins registered on entity
+# - 12 plugins in code referencing entity
+# - 4 web resources using entity
+# - 2 forms, 4 views
+# - Risk assessment: HIGH
+```
+
+**Scenario 3: Code Review**
+```bash
+# Find all code (C# and JS) using an entity
+d365ai impact analyze tvs_city --format json
+
+# Review:
+# - Line numbers in plugin code
+# - Function descriptions from comments
+# - Code snippets for context
+```
 
 ---
 
