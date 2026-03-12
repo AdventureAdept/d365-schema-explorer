@@ -24,37 +24,11 @@ D365 Schema Explorer helps Dynamics 365 developers:
 
 ## ✨ Features
 
-### 🔐 Security (Phase 1)
-- ✅ **OS Credential Manager** — Tokens stored in OS keychain (not plain text)
-- ✅ **XSS Protection** — All webview content HTML-escaped
-- ✅ **Input Validation** — Strict patterns prevent OData injection
-- ✅ **API Retry Logic** — Exponential backoff for transient failures
-- ✅ **Rate Limit Handling** — Automatic retry on 429 errors
-
-### 🛡️ Reliability (Phase 2)
-- ✅ **Unit Test Suite** — Tests for auth, validation, retry, cache
-- ✅ **Error Handling** — Custom error types with context logging
-- ✅ **Token Refresh Locking** — Prevents concurrent refresh race conditions
-- ✅ **Cache Backup** — Auto-backup before writes, corruption recovery
-- ✅ **Request Timeouts** — 30s default timeout on all API calls
-- ✅ **Null Safety** — Strict TypeScript null checks throughout
-
-### 🏗️ Infrastructure (Phase 3)
-- ✅ **CI/CD Pipelines** — GitHub Actions for build, test, publish
-- ✅ **Configurable API Version** — `DATAVERSE_API_VERSION` env var
-- ✅ **Dependency Graph GUI** — Interactive Mermaid viewer in VS Code
-
-### 🔍 Enhanced Impact Analyzer (NEW)
-- ✅ **Web Resource Analysis** — Scan JavaScript web resources for entity/field usage
-- ✅ **Plugin Code Analysis** — Analyze C# plugin code from Azure DevOps
-- ✅ **Field-Level Analysis** — Find specific field usage across all components
-- ✅ **Code Snippets** — View actual code with line numbers and context
-- ✅ **Function Descriptions** — Extract JSDoc/XML comments for context
-
-### 📚 Documentation (Phase 4)
-- ✅ **API Reference** — Complete CLI command documentation
-- ✅ **Troubleshooting Guide** — Common issues with solutions
-- ✅ **CSP Headers** — Secure webview configuration
+- **Schema Explorer** — Browse, search, and export Dataverse schema
+- **Impact Analyzer** — Find dependencies across plugins, web resources, and code
+- **VS Code Extension** — Tree view, dependency graphs, and inline help
+- **Secure Auth** — OS credential manager, token encryption
+- **Delta Sync** — 10-20x faster incremental updates
 
 ---
 
