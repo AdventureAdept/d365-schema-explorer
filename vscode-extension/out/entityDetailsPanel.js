@@ -5,6 +5,16 @@ const vscode = require("vscode");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+function escapeHtml(unsafe) {
+    if (!unsafe)
+        return '';
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 class EntityDetailsPanel {
     static createOrShow(extensionUri, item, isAttribute = false, isRelationship = false) {
         const column = vscode.window.activeTextEditor
@@ -77,7 +87,7 @@ class EntityDetailsPanel {
         if (!clientName) {
             return this._getErrorHtml('No active client');
         }
-        const cacheFilePath = path.join(configDir, 'clients', `${clientName}-cache.json`);
+        const cacheFilePath = path.join(configDir, `${clientName}-cache.json`);
         if (!fs.existsSync(cacheFilePath)) {
             return this._getErrorHtml('No schema cache found');
         }
@@ -142,7 +152,7 @@ class EntityDetailsPanel {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Entity: ${entity.LogicalName}</title>
+                <title>Entity: ${escapeHtml(entity.LogicalName)}</title>
                 <style>
                     body {
                         font-family: var(--vscode-font-family);

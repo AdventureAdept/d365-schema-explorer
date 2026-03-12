@@ -1,73 +1,33 @@
-import * as vscode from 'vscode';
-
-interface ComponentItem {
-  name: string;
-  description?: string;
-  riskLevel?: string;
-  metadata?: { description?: string; lineNumber?: number; codeSnippet?: string; riskLevel?: string };
-}
-
-interface ImpactReportData {
-  target: { type: string; name: string; entityName?: string };
-  summary: {
-    totalDependencies: number;
-    highRiskCount: number;
-    mediumRiskCount: number;
-    lowRiskCount: number;
-  };
-  components: {
-    plugins: ComponentItem[];
-    workflows: ComponentItem[];
-    forms: ComponentItem[];
-    views: ComponentItem[];
-    reports: ComponentItem[];
-    webResources?: ComponentItem[];
-  };
-  recommendations: string[];
-  mermaidGraph: string;
-}
-
-export class DependencyGraphPanel {
-  public static currentPanel: DependencyGraphPanel | undefined;
-  public static readonly viewType = 'dependencyGraph';
-
-  private readonly _panel: vscode.WebviewPanel;
-  private readonly _extensionUri: vscode.Uri;
-  private _disposables: vscode.Disposable[] = [];
-
-  public static createOrShow(extensionUri: vscode.Uri, data: ImpactReportData) {
-    const panel = vscode.window.createWebviewPanel(
-      DependencyGraphPanel.viewType,
-      `Impact: ${data.target.name}`,
-      vscode.ViewColumn.One,
-      { enableScripts: true }
-    );
-
-    DependencyGraphPanel.currentPanel = new DependencyGraphPanel(panel, extensionUri);
-    DependencyGraphPanel.currentPanel.update(data);
-  }
-
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
-    this._panel = panel;
-    this._extensionUri = extensionUri;
-    this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-  }
-
-  public update(data: ImpactReportData) {
-    this._panel.title = `Impact: ${data.target.name}`;
-    this._panel.webview.html = this._getHtml(data);
-  }
-
-  private _section(icon: string, title: string, items: ComponentItem[], color: string): string {
-    if (items.length === 0) return '';
-    const rows = items.map(item => {
-      const rl = item.riskLevel || item.metadata?.riskLevel;
-      const risk = rl === 'high' ? '🔴' : rl === 'medium' ? '🟡' : '🟢';
-      const desc = (item.description || item.metadata?.description) ? `<div class="desc">${item.description || item.metadata?.description}</div>` : '';
-      return `<div class="item">${risk} <strong>${item.name || '(unnamed)'}</strong>${desc}</div>`;
-    }).join('');
-
-    return `
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DependencyGraphPanel = void 0;
+const vscode = require("vscode");
+class DependencyGraphPanel {
+    static createOrShow(extensionUri, data) {
+        const panel = vscode.window.createWebviewPanel(DependencyGraphPanel.viewType, `Impact: ${data.target.name}`, vscode.ViewColumn.One, { enableScripts: true });
+        DependencyGraphPanel.currentPanel = new DependencyGraphPanel(panel, extensionUri);
+        DependencyGraphPanel.currentPanel.update(data);
+    }
+    constructor(panel, extensionUri) {
+        this._disposables = [];
+        this._panel = panel;
+        this._extensionUri = extensionUri;
+        this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+    }
+    update(data) {
+        this._panel.title = `Impact: ${data.target.name}`;
+        this._panel.webview.html = this._getHtml(data);
+    }
+    _section(icon, title, items, color) {
+        if (items.length === 0)
+            return '';
+        const rows = items.map(item => {
+            const rl = item.riskLevel || item.metadata?.riskLevel;
+            const risk = rl === 'high' ? '🔴' : rl === 'medium' ? '🟡' : '🟢';
+            const desc = (item.description || item.metadata?.description) ? `<div class="desc">${item.description || item.metadata?.description}</div>` : '';
+            return `<div class="item">${risk} <strong>${item.name || '(unnamed)'}</strong>${desc}</div>`;
+        }).join('');
+        return `
     <div class="section">
       <div class="section-header" onclick="toggle(this)" style="border-left: 4px solid ${color}">
         <span>${icon} ${title}</span>
@@ -76,20 +36,17 @@ export class DependencyGraphPanel {
       </div>
       <div class="section-body">${rows}</div>
     </div>`;
-  }
-
-  private _getHtml(data: ImpactReportData): string {
-    const plugins      = this._section('🔌', 'Plugins',       data.components.plugins,              '#f4d03f');
-    const workflows    = this._section('⚡', 'Workflows',     data.components.workflows,            '#9b59b6');
-    const forms        = this._section('📄', 'Forms',         data.components.forms,                '#2ecc71');
-    const views        = this._section('👁', 'Views',         data.components.views,                '#34495e');
-    const reports      = this._section('📊', 'Reports',       data.components.reports,              '#e67e22');
-    const webResources = this._section('📜', 'Web Resources', data.components.webResources || [],   '#3498db');
-
-    const recs = data.recommendations.map(r => `<li>${r}</li>`).join('');
-    const mermaid = data.mermaidGraph;
-
-    return `<!DOCTYPE html>
+    }
+    _getHtml(data) {
+        const plugins = this._section('🔌', 'Plugins', data.components.plugins, '#f4d03f');
+        const workflows = this._section('⚡', 'Workflows', data.components.workflows, '#9b59b6');
+        const forms = this._section('📄', 'Forms', data.components.forms, '#2ecc71');
+        const views = this._section('👁', 'Views', data.components.views, '#34495e');
+        const reports = this._section('📊', 'Reports', data.components.reports, '#e67e22');
+        const webResources = this._section('📜', 'Web Resources', data.components.webResources || [], '#3498db');
+        const recs = data.recommendations.map(r => `<li>${r}</li>`).join('');
+        const mermaid = data.mermaidGraph;
+        return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -157,14 +114,17 @@ export class DependencyGraphPanel {
   </script>
 </body>
 </html>`;
-  }
-
-  public dispose() {
-    DependencyGraphPanel.currentPanel = undefined;
-    this._panel.dispose();
-    while (this._disposables.length) {
-      const x = this._disposables.pop();
-      if (x) x.dispose();
     }
-  }
+    dispose() {
+        DependencyGraphPanel.currentPanel = undefined;
+        this._panel.dispose();
+        while (this._disposables.length) {
+            const x = this._disposables.pop();
+            if (x)
+                x.dispose();
+        }
+    }
 }
+exports.DependencyGraphPanel = DependencyGraphPanel;
+DependencyGraphPanel.viewType = 'dependencyGraph';
+//# sourceMappingURL=dependencyGraphPanel.js.map

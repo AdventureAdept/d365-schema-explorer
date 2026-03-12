@@ -28,7 +28,12 @@ export class GraphBuilder {
     this.authManager = authManager;
     this.clientName = clientName;
     this.webResourceClient = new WebResourceClient(orgUrl, authManager, clientName);
-    this.pluginCodeAnalyzer = new PluginCodeAnalyzer(pluginSourcePath);
+    try {
+      this.pluginCodeAnalyzer = new PluginCodeAnalyzer(pluginSourcePath);
+    } catch {
+      // Plugin source path not configured or doesn't exist — skip local code analysis
+      this.pluginCodeAnalyzer = null as any;
+    }
   }
 
   /**
@@ -291,8 +296,9 @@ export class GraphBuilder {
       console.warn(`Failed to get web resources for ${entityLogicalName}:`, error);
     }
 
-    // Get plugin code references (C# files from Azure DevOps)
+    // Get plugin code references (C# files from local source)
     try {
+      if (!this.pluginCodeAnalyzer) throw new Error('Plugin source path not configured');
       const pluginUsages = await this.pluginCodeAnalyzer.searchPluginCode(entityLogicalName);
       for (const usage of pluginUsages) {
         for (const occurrence of usage.occurrences) {
