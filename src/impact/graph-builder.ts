@@ -7,12 +7,14 @@ import { AuthManager } from '../auth/manager';
 
 export class GraphBuilder {
   private dependencyClient: DependencyClient;
-  private webResourceClient: WebResourceClient;
-  private pluginCodeAnalyzer: PluginCodeAnalyzer;
   private cacheManager: CacheManager;
   private orgUrl: string;
   private authManager: AuthManager;
   private clientName: string;
+  
+  // Public for function search access
+  public webResourceClient: WebResourceClient;
+  public pluginCodeAnalyzer: PluginCodeAnalyzer;
 
   constructor(
     dependencyClient: DependencyClient, 

@@ -165,6 +165,96 @@ export class PluginCodeAnalyzer {
   }
 
   /**
+   * Search for function/method definitions by name
+   */
+  async searchFunctions(functionName: string): Promise<PluginCodeUsage[]> {
+    // Validate input
+    if (!functionName || typeof functionName !== 'string') {
+      throw new Error('functionName is required and must be a string');
+    }
+    
+    if (functionName.length > 100) {
+      throw new Error('functionName exceeds maximum length of 100 characters');
+    }
+    
+    const usages: PluginCodeUsage[] = [];
+    const csFiles = await this.findCSharpFilesAsync(this.pluginSourcePath);
+    const filesToProcess = csFiles.slice(0, this.maxFiles);
+    
+    const concurrencyLimit = 20;
+    
+    for (let i = 0; i < filesToProcess.length; i += concurrencyLimit) {
+      const batch = filesToProcess.slice(i, i + concurrencyLimit);
+      
+      const batchResults = await Promise.all(
+        batch.map(async (filePath) => {
+          try {
+            const stats = await fs.promises.stat(filePath);
+            if (stats.size > this.maxFileSize) {
+              return null;
+            }
+            
+            const content = await fs.promises.readFile(filePath, 'utf-8');
+            const occurrences = this.findFunctionDefinitions(content, functionName);
+            
+            if (occurrences.length > 0) {
+              const pluginName = this.extractPluginName(filePath, content);
+              return {
+                pluginName,
+                filePath: path.relative(this.pluginSourcePath, filePath),
+                occurrences
+              };
+            }
+          } catch (error) {
+            console.warn(`Failed to read file ${filePath}:`, error);
+          }
+          return null;
+        })
+      );
+      
+      usages.push(...batchResults.filter((r): r is PluginCodeUsage => r !== null));
+    }
+    
+    return usages;
+  }
+
+  /**
+   * Find function/method definitions in C# code
+   */
+  private findFunctionDefinitions(content: string, functionName: string): PluginCodeUsage['occurrences'] {
+    const lines = content.split('\n');
+    const occurrences: PluginCodeUsage['occurrences'] = [];
+    
+    // C# method definition patterns
+    const methodPatterns = [
+      new RegExp(`\\b(public|private|protected|internal)\\s+(static\\s+)?(async\\s+)?(void|Task|IPlugin|bool|int|string|Entity)\\s+${functionName}\\s*\\(`),
+      new RegExp(`\\b${functionName}\\s*\\(.*?\\)\\s*\\{`),
+    ];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      for (const pattern of methodPatterns) {
+        if (pattern.test(line)) {
+          const context = this.extractContext(lines, i);
+          const functionDescription = this.extractFunctionDescription(lines, i);
+          
+          occurrences.push({
+            lineNumber: i + 1,
+            codeSnippet: line.trim(),
+            context,
+            functionDescription: functionDescription || `Method: ${functionName}`
+          });
+          
+          break;
+        }
+      }
+    }
+
+    return occurrences;
+  }
+
+  /**
    * Find occurrences of search term in C# code
    */
   private findOccurrences(

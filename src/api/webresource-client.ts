@@ -125,6 +125,93 @@ export class WebResourceClient extends DataverseClient {
   }
 
   /**
+   * Search for JavaScript function definitions by name
+   */
+  async searchFunctions(functionName: string): Promise<WebResourceUsage[]> {
+    // Validate input
+    if (!functionName || typeof functionName !== 'string') {
+      throw new Error('functionName is required and must be a string');
+    }
+    
+    if (functionName.length > 100) {
+      throw new Error('functionName exceeds maximum length of 100 characters');
+    }
+    
+    const sanitizedFunctionName = this.sanitizeSearchTerm(functionName);
+    const webResources = await this.getJavaScriptWebResources(500);
+    
+    const concurrencyLimit = 10;
+    const usages: WebResourceUsage[] = [];
+    
+    for (let i = 0; i < webResources.length; i += concurrencyLimit) {
+      const batch = webResources.slice(i, i + concurrencyLimit);
+      
+      const batchResults = await Promise.all(
+        batch.map(async (wr) => {
+          const maxContentSize = 500 * 1024;
+          const content = wr.content.length > maxContentSize 
+            ? wr.content.substring(0, maxContentSize) 
+            : wr.content;
+          
+          const occurrences = this.findFunctionDefinitions(content, sanitizedFunctionName);
+          
+          if (occurrences.length > 0) {
+            return {
+              webResourceName: wr.name,
+              webResourceType: this.getWebResourceTypeName(wr.webresourcetype),
+              occurrences
+            };
+          }
+          return null;
+        })
+      );
+      
+      usages.push(...batchResults.filter((r): r is WebResourceUsage => r !== null));
+    }
+
+    return usages;
+  }
+
+  /**
+   * Find JavaScript function definitions
+   */
+  private findFunctionDefinitions(content: string, functionName: string): WebResourceUsage['occurrences'] {
+    const lines = content.split('\n');
+    const occurrences: WebResourceUsage['occurrences'] = [];
+    
+    // JavaScript function definition patterns
+    const functionPatterns = [
+      new RegExp(`\\bfunction\\s+${functionName}\\s*\\(`),
+      new RegExp(`\\b${functionName}\\s*:\\s*function\\s*\\(`),
+      new RegExp(`\\b${functionName}\\s*=\\s*(async\\s+)?function\\s*\\(`),
+      new RegExp(`\\b(const|let|var)\\s+${functionName}\\s*=\\s*(async\\s+)?\\(`),
+      new RegExp(`\\b${functionName}\\s*\\(.*?\\)\\s*\\{`),
+    ];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      for (const pattern of functionPatterns) {
+        if (pattern.test(line)) {
+          const context = this.extractContext(lines, i);
+          const functionDescription = this.extractFunctionDescription(lines, i);
+          
+          occurrences.push({
+            lineNumber: i + 1,
+            codeSnippet: line.trim(),
+            context,
+            functionDescription: functionDescription || `Function: ${functionName}`
+          });
+          
+          break;
+        }
+      }
+    }
+
+    return occurrences;
+  }
+
+  /**
    * Sanitize search term to prevent regex injection and XSS
    */
   private sanitizeSearchTerm(term: string): string {

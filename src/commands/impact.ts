@@ -440,3 +440,101 @@ function formatReportAsMarkdown(report: any): string {
   
   return md;
 }
+
+export async function functionCommand(
+  functionName: string,
+  options: { 
+    language?: string;
+    output?: string;
+  }
+): Promise<void> {
+  // Validate function name
+  if (!functionName || typeof functionName !== 'string') {
+    console.log(chalk.red('Function name is required'));
+    return;
+  }
+  
+  let cache: CacheManager | undefined;
+  let spinner: any;
+  
+  try {
+    const setup = await setupImpactCommand();
+    cache = setup.cache;
+
+    spinner = ora(`Searching for function "${functionName}"...`).start();
+
+    const results: any[] = [];
+
+    // Search in plugin code (C#)
+    if (!options.language || options.language === 'csharp') {
+      spinner.text = `Searching C# plugins for "${functionName}"...`;
+      try {
+        if (setup.graphBuilder.pluginCodeAnalyzer) {
+          const pluginResults = await setup.graphBuilder.pluginCodeAnalyzer.searchFunctions(functionName);
+          for (const result of pluginResults) {
+            results.push({
+              type: 'C# Plugin',
+              source: result.pluginName,
+              file: result.filePath,
+              occurrences: result.occurrences
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('Plugin code search skipped:', error);
+      }
+    }
+
+    // Search in web resources (JavaScript)
+    if (!options.language || options.language === 'javascript') {
+      spinner.text = `Searching JavaScript web resources for "${functionName}"...`;
+      try {
+        const webResults = await setup.graphBuilder.webResourceClient.searchFunctions(functionName);
+        for (const result of webResults) {
+          results.push({
+            type: 'JavaScript Web Resource',
+            source: result.webResourceName,
+            occurrences: result.occurrences
+          });
+        }
+      } catch (error) {
+        console.warn('Web resource search skipped:', error);
+      }
+    }
+
+    spinner.succeed(chalk.green(`Found ${results.length} results for "${functionName}"`));
+
+    // Display results
+    console.log(chalk.bold(`\n🔍 Function Search Results: ${functionName}\n`));
+    
+    if (results.length === 0) {
+      console.log(chalk.yellow('No functions found with that name.'));
+      return;
+    }
+
+    for (const result of results) {
+      console.log(chalk.cyan(`${result.type}:`));
+      console.log(`  Source: ${result.source}`);
+      if (result.file) {
+        console.log(`  File: ${result.file}`);
+      }
+      
+      for (const occ of result.occurrences) {
+        console.log(`  Line ${occ.lineNumber}: ${chalk.gray(occ.codeSnippet.substring(0, 80))}`);
+        if (occ.functionDescription) {
+          console.log(`    ${chalk.gray(occ.functionDescription)}`);
+        }
+      }
+      console.log();
+    }
+
+  } catch (error: any) {
+    if (spinner) {
+      spinner.fail(chalk.red('Failed to search functions'));
+    }
+    console.error(chalk.red(error.message));
+    throw error;
+  } finally {
+    cache?.close();
+  }
+}
