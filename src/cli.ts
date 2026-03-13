@@ -9,7 +9,7 @@ import * as path from 'path';
 import { useCommand } from './commands/use';
 import { connectCommand, disconnectCommand, statusCommand, listClientsCommand } from './commands/env';
 import { pullCommand, searchCommand, exportCommand, listEntitiesCommand, syncStatusCommand } from './commands/schema';
-import { analyzeCommand, graphCommand, reportCommand } from './commands/impact';
+import { analyzeCommand, graphCommand, reportCommand, functionCommand } from './commands/impact';
 
 // Read package.json for version
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
@@ -162,6 +162,15 @@ impactCommand
   .option('-o, --output <path>', 'Output file path')
   .action(async (target: string, options) => {
     await reportCommand(target, options);
+  });
+
+impactCommand
+  .command('function <name>')
+  .description('Search for a function name across C# plugins and JavaScript web resources')
+  .option('--language <language>', 'Filter by language (csharp, javascript)')
+  .option('-o, --output <path>', 'Output file path')
+  .action(async (name: string, options) => {
+    await functionCommand(name, options);
   });
 
 // ============================================
