@@ -88,7 +88,7 @@ export class DependencyClient extends DataverseClient {
    * Get plugin registrations for an entity
    */
   async getPluginsForEntity(entityLogicalName: string): Promise<PluginRegistration[]> {
-    // Query SdkMessageProcessingStep filtered by entity via sdkmessagefilter navigation
+    // Query SdkMessageProcessingStep filtered by entity, expand plugintype for meaningful name
     const response = await this.request<{
       value: {
         sdkmessageprocessingstepid: string;
@@ -96,20 +96,31 @@ export class DependencyClient extends DataverseClient {
         stage: number;
         mode: number;
         filteringattributes: string;
+        plugintypeid: {
+          typename?: string;
+          friendlyname?: string;
+        } | null;
       }[];
     }>(
-      `sdkmessageprocessingsteps?$select=sdkmessageprocessingstepid,name,stage,mode,filteringattributes&` +
-      `$filter=sdkmessagefilterid/primaryobjecttypecode eq '${entityLogicalName}'`
+      `sdkmessageprocessingsteps?$select=sdkmessageprocessingstepid,name,stage,mode,filteringattributes` +
+      `&$expand=plugintypeid($select=typename,friendlyname)` +
+      `&$filter=sdkmessagefilterid/primaryobjecttypecode eq '${entityLogicalName}'`
     );
 
-    return response.value.map(p => ({
-      pluginAssemblyId: p.sdkmessageprocessingstepid,
-      name: p.name,
-      entityLogicalName,
-      messageName: '',
-      stage: p.stage,
-      mode: p.mode,
-    }));
+    return response.value.map(p => {
+      // Prefer plugintype typename over generic step name
+      const pluginTypeName = p.plugintypeid?.typename || p.plugintypeid?.friendlyname;
+      const isGeneric = !p.name || ['ObjectModel Implementation', 'External plug-in implementation'].includes(p.name);
+      const displayName = (!isGeneric ? p.name : null) || pluginTypeName || p.name || '(unnamed)';
+      return {
+        pluginAssemblyId: p.sdkmessageprocessingstepid,
+        name: displayName,
+        entityLogicalName,
+        messageName: '',
+        stage: p.stage,
+        mode: p.mode,
+      };
+    });
   }
 
   /**
