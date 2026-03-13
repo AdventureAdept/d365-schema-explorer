@@ -100,23 +100,31 @@ export class DependencyClient extends DataverseClient {
           typename?: string;
           friendlyname?: string;
         } | null;
+        sdkmessageid: {
+          name?: string;
+        } | null;
       }[];
     }>(
       `sdkmessageprocessingsteps?$select=sdkmessageprocessingstepid,name,stage,mode,filteringattributes` +
-      `&$expand=plugintypeid($select=typename,friendlyname)` +
+      `&$expand=plugintypeid($select=typename,friendlyname),sdkmessageid($select=name)` +
       `&$filter=sdkmessagefilterid/primaryobjecttypecode eq '${entityLogicalName}'`
     );
 
     return response.value.map(p => {
-      // Prefer plugintype typename over generic step name
       const pluginTypeName = p.plugintypeid?.typename || p.plugintypeid?.friendlyname;
+      const messageName = p.sdkmessageid?.name || '';
       const isGeneric = !p.name || ['ObjectModel Implementation', 'External plug-in implementation'].includes(p.name);
-      const displayName = (!isGeneric ? p.name : null) || pluginTypeName || p.name || '(unnamed)';
+      // Use step name if meaningful, otherwise fall back to "ClassName: MessageName"
+      const displayName = (!isGeneric ? p.name : null)
+        || (pluginTypeName && messageName ? `${pluginTypeName}: ${messageName}` : null)
+        || pluginTypeName
+        || p.name
+        || '(unnamed)';
       return {
         pluginAssemblyId: p.sdkmessageprocessingstepid,
         name: displayName,
         entityLogicalName,
-        messageName: '',
+        messageName,
         stage: p.stage,
         mode: p.mode,
       };
