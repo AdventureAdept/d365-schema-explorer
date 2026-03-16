@@ -19,12 +19,28 @@
 
 ---
 
-## 📦 What's Inside
+## ✨ Features
 
-| Product | Description | Status |
-|---------|-------------|--------|
-| **🗂️ Schema Explorer** | Browse, search, and export Dataverse schema | ✅ **v1.0.0** |
-| **🔍 Impact Analyzer** | Find dependencies before you break production | ✅ **v1.0.0** |
+### 🗂️ Schema Management
+
+- **Browse Schema** — Explore entities, attributes, and relationships
+- **Search Entities** — Find entities and fields instantly
+- **Export Schema** — Export as JSON, Markdown, or CSV
+- **Delta Sync** — 10-20x faster incremental updates (3-5s vs 60s)
+- **Multi-Environment** — Manage connections to Dev, Test, Prod
+- **VS Code Extension** — Tree view, search panel, Code Lens
+
+### 🔍 Impact Analysis
+
+- **Dependency Detection** — Find all uses of an entity or field
+- **Multi-Source Scanning**:
+  - Dataverse API (relationships, workflows, business rules)
+  - JavaScript web resources
+  - C# plugin code (Azure DevOps integration)
+- **Field-Level Analysis** — Search specific field usage (e.g., `account.tvs_city`)
+- **Code Context** — Shows line numbers and code snippets
+- **Visual Graphs** — Interactive dependency visualization
+- **Impact Reports** — Markdown/JSON reports for change review
 
 ---
 
@@ -150,8 +166,8 @@ d365ai impact search account.creditlimit --show-code
 ├── 📂 src
 │   ├── 🔌 api/          # Dataverse & Azure DevOps connectivity
 │   ├── 🛠️ commands/     # CLI entry points (d365ai)
-│   ├── 🗂️ schema/       # Product 1: Metadata caching & export
-│   └── 🔍 impact/       # Product 2: Dependency graphing
+│   ├── 🗂️ schema/       # Schema management (browse, search, export)
+│   └── 🔍 impact/       # Impact analysis (dependencies, graphs)
 ├── 💻 vscode-extension/ # Tree view, WebView, Code Lens
 ├── 📚 docs/
 │   ├── tutorials/       # How-to guides
@@ -194,31 +210,39 @@ d365ai impact search account.creditlimit --show-code
 
 ---
 
-## 📊 Product Comparison
+## 🎯 Common Workflows
 
-| Feature | Schema Explorer | Impact Analyzer |
-|---------|----------------|-----------------|
-| **Browse Schema** | ✅ Yes | ❌ No |
-| **Search Entities** | ✅ Yes | ❌ No |
-| **Export Schema** | ✅ Yes | ❌ No |
-| **Dependency Analysis** | ❌ No | ✅ Yes |
-| **Field Usage Search** | ❌ No | ✅ Yes |
-| **Plugin Code Analysis** | ❌ No | ✅ Yes |
-| **Web Resource Scan** | ❌ No | ✅ Yes |
-| **Impact Reports** | ❌ No | ✅ Yes |
-| **Dependency Graphs** | ❌ No | ✅ Yes |
-
-### Common Workflow
-
-**Step 1:** Use Schema Explorer to find the logical name of a field  
-**Step 2:** Use Impact Analyzer to see if deleting it will break the Contact plugin
+### Workflow 1: Rename Field Safely
 
 ```bash
-# Find field
+# 1. Find the field
 d365ai search field city
 
-# Check impact before deleting
+# 2. Check all usages before renaming
 d365ai impact search account.tvs_city --show-code
+
+# 3. Review dependencies (plugins, web resources, workflows)
+# 4. Update code, test, then rename in Dataverse
+```
+
+### Workflow 2: Delete Entity Safely
+
+```bash
+# 1. Analyze full impact
+d365ai impact analyze tvs_log --full
+
+# 2. Review dependencies
+# 3. Remove/update dependencies
+# 4. Delete entity safely
+```
+
+### Workflow 3: Code Review
+
+```bash
+# Audit who's accessing sensitive fields
+d365ai impact search account.creditlimit --show-code
+
+# Check for validation, security roles, logging
 ```
 
 ---
