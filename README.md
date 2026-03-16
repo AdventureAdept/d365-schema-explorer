@@ -90,53 +90,6 @@ d365ai impact analyze account --full
 
 ---
 
-## 🎯 Use Cases
-
-### 🔧 Scenario 1: Rename Field (Without Breaking Production)
-
-**Problem:** You need to rename `account.tvs_city` to `account.tvs_municipality`
-
-**Solution:**
-```bash
-# 1. Find all usages first
-d365ai impact search account.tvs_city --show-code
-
-# 2. Review output - shows plugins, web resources, workflows
-# 3. Update code, test, then rename
-```
-
-**Why:** Prevents 5 hidden dependencies from breaking in production.
-
----
-
-### 🔍 Scenario 2: Before Deleting Custom Entity
-
-**Problem:** Is it safe to delete `tvs_log` entity?
-
-**Solution:**
-```bash
-d365ai impact analyze tvs_log --full
-```
-
-**Output:** Shows 3 plugins, 2 workflows, 1 view using it.
-
-**Action:** Remove dependencies first, then delete safely.
-
----
-
-### 📊 Scenario 3: Code Review - Audit Sensitive Field Access
-
-**Problem:** Who's accessing `account.creditlimit`?
-
-**Solution:**
-```bash
-d365ai impact search account.creditlimit --show-code
-```
-
-**Audit:** Check for proper validation, security roles, and logging.
-
----
-
 ## 📸 Visual Proof
 
 ### VS Code Extension
@@ -212,38 +165,64 @@ d365ai impact search account.creditlimit --show-code
 
 ## 🎯 Common Workflows
 
-### Workflow 1: Rename Field Safely
+### 🔧 Rename Field Safely
+
+**Problem:** Need to rename `account.tvs_city` to `account.tvs_municipality`
 
 ```bash
-# 1. Find the field
-d365ai search field city
-
-# 2. Check all usages before renaming
+# 1. Find all usages first
 d365ai impact search account.tvs_city --show-code
 
-# 3. Review dependencies (plugins, web resources, workflows)
-# 4. Update code, test, then rename in Dataverse
+# 2. Review output (plugins, web resources, workflows)
+# 3. Update code, test, then rename in Dataverse
 ```
 
-### Workflow 2: Delete Entity Safely
+**Why:** Prevents 5 hidden dependencies from breaking production.
+
+---
+
+### 🗑️ Delete Entity Safely
+
+**Problem:** Is it safe to delete `tvs_log` entity?
 
 ```bash
 # 1. Analyze full impact
 d365ai impact analyze tvs_log --full
 
-# 2. Review dependencies
-# 3. Remove/update dependencies
-# 4. Delete entity safely
+# 2. Review: Shows 3 plugins, 2 workflows, 1 view
+# 3. Remove dependencies first, then delete
 ```
 
-### Workflow 3: Code Review
+**Why:** Prevents orphaned code and broken workflows.
+
+---
+
+### 📋 Code Review - Audit Field Access
+
+**Problem:** Who's accessing `account.creditlimit`?
 
 ```bash
-# Audit who's accessing sensitive fields
+# Audit field usage with code context
 d365ai impact search account.creditlimit --show-code
-
-# Check for validation, security roles, logging
 ```
+
+**Check:** Validation, security roles, logging.
+
+---
+
+### 🔍 Find & Browse Schema
+
+**Problem:** Need logical name for "city" field
+
+```bash
+# Search across all entities
+d365ai search field city
+
+# Or search in specific entity
+d365ai search field city --entity account
+```
+
+**Why:** Faster than opening D365 or XrmToolBox.
 
 ---
 
