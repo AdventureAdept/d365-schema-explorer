@@ -1,7 +1,7 @@
 {
-  "name": "d365ai",
-  "version": "0.1.0",
-  "description": "D365 Schema Explorer - CLI and VS Code extension for browsing Dataverse schema",
+  "name": "d365-schema-tools",
+  "version": "1.0.0",
+  "description": "D365 Schema Explorer & Impact Analyzer - Comprehensive tools for Dataverse developers",
   "main": "dist/index.js",
   "bin": {
     "d365ai": "./dist/cli.js"
@@ -19,8 +19,11 @@
     "d365",
     "dataverse",
     "schema",
+    "impact",
+    "analyzer",
     "cli",
-    "vscode"
+    "vscode",
+    "dependencies"
   ],
   "author": "",
   "license": "MIT",
