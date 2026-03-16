@@ -1,154 +1,196 @@
 # 🦞 D365 Tools
 
-**2 Products in 1 Repository** — Comprehensive tools for Dynamics 365 developers
+**A lightning-fast CLI to browse Dataverse schema and analyze dependency impact before you break production.**
 
 ![Status](https://img.shields.io/badge/status-Production%20Ready-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green)
 ![TypeScript](https://img.shields.io/badge/typescript-5.9.3-blue)
+![NPM](https://img.shields.io/npm/v/d365-tools)
+![Build](https://img.shields.io/github/actions/workflow/status/AdventureAdept/d365-tools/ci.yml)
 
 ---
 
-## 📦 What's Included
+## 🎬 Quick Demo
 
-This repository contains **2 complete products**:
+> **[INSERT: 10-second terminal GIF showing `d365ai impact search account.tvs_city` in action]**
 
-| Product | Name | Description | Status |
-|---------|------|-------------|--------|
-| **Product 1** | 🗂️ **Schema Explorer** | Browse, search, and export Dataverse schema | ✅ **v1.0.0** |
-| **Product 2** | 🔍 **Impact Analyzer** | Analyze dependencies and change impact | ✅ **v1.0.0** |
+*Figure: Finding all uses of a field in 2 seconds*
+
+---
+
+## 📦 What's Inside
+
+| Product | Description | Status |
+|---------|-------------|--------|
+| **🗂️ Schema Explorer** | Browse, search, and export Dataverse schema | ✅ **v1.0.0** |
+| **🔍 Impact Analyzer** | Find dependencies before you break production | ✅ **v1.0.0** |
+
+---
+
+## ⚡ Quick Start (5 Minutes)
+
+### Prerequisites
+
+- ✅ Node.js 18.0+
+- ✅ Dataverse environment URL (e.g., `https://yourorg.crm.dynamics.com`)
+- ✅ Azure AD App Registration (for non-interactive login) **OR** use interactive device flow
+
+### Install
+
+```bash
+npm install -g d365-tools
+```
+
+### Connect
+
+```bash
+d365ai env connect
+```
+
+**You'll be prompted for:**
+- Organization URL
+- Client name (friendly name for this connection)
+- Interactive login via device code (or provide Client ID/Secret for service principal)
+
+### Pull Schema
+
+```bash
+d365ai schema pull
+```
+
+### Search & Analyze
+
+```bash
+# Search for entities
+d365ai search entity account
+
+# Find field dependencies (prevents breaking changes!)
+d365ai impact search account.tvs_city
+
+# Analyze full impact before renaming
+d365ai impact analyze account --full
+```
 
 ---
 
 ## 🎯 Use Cases
 
-### When to Use Schema Explorer (Product 1)
+### 🔧 Scenario 1: Rename Field (Without Breaking Production)
 
-- You need to **browse entities and fields** in Dataverse
-- You want to **search schema** without opening D365
-- You need to **export schema documentation**
-- You want **VS Code integration** for schema browsing
-- You need **fast delta sync** (10-20x faster than full sync)
+**Problem:** You need to rename `account.tvs_city` to `account.tvs_municipality`
 
-### When to Use Impact Analyzer (Product 2)
+**Solution:**
+```bash
+# 1. Find all usages first
+d365ai impact search account.tvs_city --show-code
 
-- You're **renaming or deleting** an entity/field
-- You need to find **what uses a specific field**
-- You want to analyze **plugin and web resource dependencies**
-- You need **dependency graphs** before making changes
-- You want to **prevent breaking changes** in production
+# 2. Review output - shows plugins, web resources, workflows
+# 3. Update code, test, then rename
+```
+
+**Why:** Prevents 5 hidden dependencies from breaking in production.
 
 ---
 
-## ✨ Key Features
+### 🔍 Scenario 2: Before Deleting Custom Entity
 
-### Product 1: Schema Explorer
+**Problem:** Is it safe to delete `tvs_log` entity?
 
-- **Browse** Dataverse schema (entities, attributes, relationships)
-- **Search** across all metadata with instant results
-- **Export** schema documentation in JSON/Markdown
-- **VS Code Extension** with tree view and search
-- **Delta Sync** - 10-20x faster incremental updates
-- **Multi-Environment** - Manage connections to multiple orgs
-- **Secure Auth** - MSAL with token encryption
+**Solution:**
+```bash
+d365ai impact analyze tvs_log --full
+```
 
-### Product 2: Impact Analyzer
+**Output:** Shows 3 plugins, 2 workflows, 1 view using it.
 
-- **Dependency Detection** - Find all uses of an entity/field
-- **Multi-Source Analysis**:
-  - D365 API (relationships, workflows, business rules)
-  - JavaScript web resources
-  - C# plugin code (Azure DevOps integration)
-- **Field-Level Analysis** - Search specific field usage
-- **Code Context** - Shows line numbers and code snippets
-- **Visual Graphs** - Interactive dependency visualization
-- **Change Impact Reports** - Before you rename/delete
+**Action:** Remove dependencies first, then delete safely.
 
 ---
 
-## 🚀 Quick Start
+### 📊 Scenario 3: Code Review - Audit Sensitive Field Access
 
-### Installation
+**Problem:** Who's accessing `account.creditlimit`?
 
+**Solution:**
 ```bash
-# Clone the repository
-git clone https://github.com/AdventureAdept/d365-tools.git
-cd d365-tools
-
-# Install dependencies
-npm install
-
-# Build both products
-npm run build
+d365ai impact search account.creditlimit --show-code
 ```
 
-### Product 1: Schema Explorer - Quick Start
+**Audit:** Check for proper validation, security roles, and logging.
 
-```bash
-# Connect to Dataverse
-d365ai env connect
+---
 
-# Pull schema metadata
-d365ai schema pull
+## 📸 Visual Proof
 
-# Search for entities
-d365ai search entity account
+### VS Code Extension
 
-# Export schema
-d365ai export account --format markdown
+> **[INSERT: Screenshot of VS Code Tree View showing entity browser]**
+
+*Figure: Browse Dataverse schema directly in VS Code*
+
+### Dependency Graph
+
+> **[INSERT: Screenshot of interactive dependency graph visualization]**
+
+*Figure: Visual impact analysis before schema changes*
+
+### Terminal Demo
+
+> **[INSERT: GIF created with vhs showing delta sync speed]**
+
+*Figure: Delta sync completes in 3 seconds (vs 60 seconds for full sync)*
+
+---
+
+## 🏗️ Architecture
+
 ```
-
-### Product 2: Impact Analyzer - Quick Start
-
-```bash
-# Analyze entity dependencies
-d365ai impact analyze account
-
-# Search field usage
-d365ai impact search account.tvs_city
-
-# Generate impact report
-d365ai impact report account --output impact-report.md
-
-# Visualize dependencies
-d365ai impact graph contact
+.
+├── 📂 src
+│   ├── 🔌 api/          # Dataverse & Azure DevOps connectivity
+│   ├── 🛠️ commands/     # CLI entry points (d365ai)
+│   ├── 🗂️ schema/       # Product 1: Metadata caching & export
+│   └── 🔍 impact/       # Product 2: Dependency graphing
+├── 💻 vscode-extension/ # Tree view, WebView, Code Lens
+├── 📚 docs/
+│   ├── tutorials/       # How-to guides
+│   ├── reference/       # CLI flags, API docs
+│   └── explanation/     # Architecture, design decisions
+└── 🧪 tests/            # Unit & Integration (Vitest)
 ```
 
 ---
 
-## 📖 Documentation
+## 🚀 Performance
 
-| Product | Documentation |
-|---------|--------------|
-| **Product 1** | [Schema Explorer Docs](./docs/PRODUCT1-DOCS.md) |
-| **Product 2** | [Impact Analyzer Docs](./docs/PRODUCT2-DOCS.md) |
-| **API Reference** | [API Documentation](./docs/API.md) |
-| **VS Code Extension** | [Extension Guide](./vscode-extension/README.md) |
+### Delta Sync: 10-20x Faster
+
+| Sync Type | Time | API Calls |
+|-----------|------|-----------|
+| **Full Sync** | 60s | 500+ |
+| **Delta Sync** | 3-5s | 10-20 |
+
+**How?** Uses ETag headers and delta-token tracking to fetch only changed metadata since last sync.
 
 ---
 
-## 🛠️ VS Code Extension
+## 🔒 Security
 
-Both products are available in a **single VS Code extension**:
+### Token Storage
 
-### Features
+✅ **OS Keychain/Secret Store** - Tokens encrypted using:
+- Windows: Credential Manager
+- macOS: Keychain
+- Linux: libsecret (GNOME Keyring/KWallet)
 
-- **Schema Tree View** - Browse entities in sidebar
-- **Search Panel** - Quick schema search
-- **Dependency Graphs** - Visual impact analysis
-- **Code Lens** - Inline schema information
-- **Right-Click Actions** - Context menu integration
+**Never stored in plain text!**
 
-### Install
+### Authentication
 
-```bash
-cd vscode-extension
-npm install
-npm run package
-
-# Install the .vsix
-code --install-extension d365-schema-tools-0.1.0.vsix
-```
+- **MSAL.js** with device flow (interactive)
+- **Service Principal** support (client credentials)
+- **Automatic token refresh** (no manual re-auth)
 
 ---
 
@@ -166,34 +208,46 @@ code --install-extension d365-schema-tools-0.1.0.vsix
 | **Impact Reports** | ❌ No | ✅ Yes |
 | **Dependency Graphs** | ❌ No | ✅ Yes |
 
----
+### Common Workflow
 
-## 🏗️ Architecture
-
-```
-d365-schema-tools/
-├── src/
-│   ├── api/              # Shared API clients
-│   ├── commands/         # CLI commands
-│   ├── schema/           # Product 1: Schema Explorer
-│   ├── impact/           # Product 2: Impact Analyzer
-│   └── utils/            # Shared utilities
-├── vscode-extension/     # Combined VS Code extension
-├── docs/                 # Documentation
-│   ├── PRODUCT1-DOCS.md
-│   ├── PRODUCT2-DOCS.md
-│   └── API.md
-└── tests/                # Test suites
-```
-
----
-
-## 🔧 Development
-
-### Build Both Products
+**Step 1:** Use Schema Explorer to find the logical name of a field  
+**Step 2:** Use Impact Analyzer to see if deleting it will break the Contact plugin
 
 ```bash
-npm run build
+# Find field
+d365ai search field city
+
+# Check impact before deleting
+d365ai impact search account.tvs_city --show-code
+```
+
+---
+
+## 📖 Documentation
+
+| Type | Content |
+|------|---------|
+| **📚 Tutorials** | [Connect to Dataverse](./docs/tutorials/connect.md) • [Analyze Impact](./docs/tutorials/analyze-impact.md) • [Before Renaming Field](./docs/tutorials/before-rename.md) |
+| **📋 Reference** | [CLI Commands](./docs/reference/cli-commands.md) • [API Reference](./docs/reference/api.md) |
+| **💡 Explanation** | [Architecture](./docs/explanation/architecture.md) • [Delta Sync Design](./docs/explanation/delta-sync.md) |
+
+---
+
+## 🛠️ Development Setup
+
+### Clone & Install
+
+```bash
+git clone https://github.com/AdventureAdept/d365-tools.git
+cd d365-tools
+npm install
+```
+
+### Link Locally (for testing)
+
+```bash
+npm link
+d365ai --version  # Test your local changes
 ```
 
 ### Run Tests
@@ -202,40 +256,30 @@ npm run build
 npm test
 ```
 
-### Development Mode
+### Build
 
 ```bash
-# Watch mode for both products
-npm run dev
-```
-
----
-
-## 📦 Publishing
-
-### NPM Package
-
-```bash
-npm publish
-```
-
-### VS Code Marketplace
-
-```bash
-cd vscode-extension
-vsce package
-vsce publish
+npm run build
 ```
 
 ---
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests
-5. Submit a pull request
+### Quick Start for Contributors
+
+1. **Fork** the repository
+2. **Create branch:** `git checkout -b feature/your-feature`
+3. **Make changes** and test locally with `npm link`
+4. **Run tests:** `npm test`
+5. **Submit PR** with description of changes
+
+### Development Tips
+
+- Use `npm link` to test CLI changes in real-time
+- Run `npm run watch` for auto-rebuild during development
+- Add tests for new features (Vitest)
+- Update docs in the same PR as code changes
 
 ---
 
@@ -253,4 +297,13 @@ MIT License - see [LICENSE](./LICENSE) for details.
 
 ---
 
-**Questions?** Open an issue or contact the maintainer.
+## 📞 Support
+
+**Questions?** 
+- 📖 [Read the docs](./docs/)
+- 🐛 [Open an issue](https://github.com/AdventureAdept/d365-tools/issues)
+- 💬 [Discussions](https://github.com/AdventureAdept/d365-tools/discussions)
+
+---
+
+**Made with ❤️ for Dynamics 365 developers**
