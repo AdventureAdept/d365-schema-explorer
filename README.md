@@ -6,8 +6,6 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green)
 ![TypeScript](https://img.shields.io/badge/typescript-5.9.3-blue)
-![NPM](https://img.shields.io/npm/v/d365-tools)
-![Build](https://img.shields.io/github/actions/workflow/status/AdventureAdept/d365-tools/ci.yml)
 
 ---
 
