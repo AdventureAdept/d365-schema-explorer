@@ -9,7 +9,7 @@
 Before you begin, ensure you have:
 
 - ✅ Node.js 18.0+ installed
-- ✅ `d365-tools` installed (`npm install -g d365-tools`)
+- ✅ `d365-tools` installed locally (clone repo and run `npm link`)
 - ✅ A Dataverse environment URL (e.g., `https://yourorg.crm.dynamics.com`)
 
 ---

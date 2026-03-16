@@ -53,7 +53,11 @@
 ### Install
 
 ```bash
-npm install -g d365-tools
+# Clone and install locally
+git clone https://github.com/AdventureAdept/d365-tools.git
+cd d365-tools
+npm install
+npm link
 ```
 
 ### Connect
