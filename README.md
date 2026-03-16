@@ -1,4 +1,4 @@
-# 🦞 D365 Schema & Impact Tools
+# 🦞 D365 Tools
 
 **2 Products in 1 Repository** — Comprehensive tools for Dynamics 365 developers
 
@@ -72,8 +72,8 @@ This repository contains **2 complete products**:
 
 ```bash
 # Clone the repository
-git clone https://github.com/AdventureAdept/d365-schema-tools.git
-cd d365-schema-tools
+git clone https://github.com/AdventureAdept/d365-tools.git
+cd d365-tools
 
 # Install dependencies
 npm install

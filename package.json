@@ -1,5 +1,5 @@
 {
-  "name": "d365-schema-tools",
+  "name": "d365-tools",
   "version": "1.0.0",
   "description": "D365 Schema Explorer & Impact Analyzer - Comprehensive tools for Dataverse developers",
   "main": "dist/index.js",
